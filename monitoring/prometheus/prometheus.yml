@@ -1,0 +1,72 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+rule_files:
+  - "alerts.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - "alertmanager:9093"
+
+scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: "api-gateway"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api-gateway:8000"]
+        labels:
+          service: "api-gateway"
+
+  - job_name: "auth-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["auth-service:8001"]
+        labels:
+          service: "auth-service"
+
+  - job_name: "plant-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["plant-service:8002"]
+        labels:
+          service: "plant-service"
+
+  - job_name: "chatbot-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["chatbot-service:8003"]
+        labels:
+          service: "chatbot-service"
+
+  - job_name: "search-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["search-service:8004"]
+        labels:
+          service: "search-service"
+
+  - job_name: "user-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["user-service:8005"]
+        labels:
+          service: "user-service"
+
+  - job_name: "postgres-exporter"
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+        labels:
+          service: "postgresql"
+
+  - job_name: "redis-exporter"
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+        labels:
+          service: "redis"

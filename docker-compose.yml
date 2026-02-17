@@ -1,0 +1,281 @@
+services:
+  # ==========================================
+  # Infrastructure
+  # ==========================================
+
+  postgres-core:
+    image: postgres:16-alpine
+    container_name: mp-postgres-core
+    environment:
+      POSTGRES_DB: ${POSTGRES_CORE_DB:-medicinal_plants_core}
+      POSTGRES_USER: ${POSTGRES_CORE_USER:-mp_core_user}
+      POSTGRES_PASSWORD: ${POSTGRES_CORE_PASSWORD:-dev_core_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_core_data:/var/lib/postgresql/data
+      - ./database/postgres/schemas/core:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_CORE_USER:-mp_core_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mp-network
+
+  postgres-auth:
+    image: postgres:16-alpine
+    container_name: mp-postgres-auth
+    environment:
+      POSTGRES_DB: ${POSTGRES_AUTH_DB:-medicinal_plants_auth}
+      POSTGRES_USER: ${POSTGRES_AUTH_USER:-mp_auth_user}
+      POSTGRES_PASSWORD: ${POSTGRES_AUTH_PASSWORD:-dev_auth_password}
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_auth_data:/var/lib/postgresql/data
+      - ./database/postgres/schemas/auth:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_AUTH_USER:-mp_auth_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mp-network
+
+  postgres-chatbot:
+    image: postgres:16-alpine
+    container_name: mp-postgres-chatbot
+    environment:
+      POSTGRES_DB: ${POSTGRES_CHATBOT_DB:-medicinal_plants_chatbot}
+      POSTGRES_USER: ${POSTGRES_CHATBOT_USER:-mp_chatbot_user}
+      POSTGRES_PASSWORD: ${POSTGRES_CHATBOT_PASSWORD:-dev_chatbot_password}
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres_chatbot_data:/var/lib/postgresql/data
+      - ./database/postgres/schemas/chatbot:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_CHATBOT_USER:-mp_chatbot_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mp-network
+
+  postgres-user:
+    image: postgres:16-alpine
+    container_name: mp-postgres-user
+    environment:
+      POSTGRES_DB: ${POSTGRES_USER_DB:-medicinal_plants_user}
+      POSTGRES_USER: ${POSTGRES_USER_USER:-mp_user_user}
+      POSTGRES_PASSWORD: ${POSTGRES_USER_PASSWORD:-dev_user_password}
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_user_data:/var/lib/postgresql/data
+      - ./database/postgres/schemas/user:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER_USER:-mp_user_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mp-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: mp-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-dev_redis_password} --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-dev_redis_password}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mp-network
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
+    container_name: mp-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - mp-network
+
+  # ==========================================
+  # Application Services
+  # ==========================================
+
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    container_name: mp-api-gateway
+    ports:
+      - "${API_GATEWAY_PORT:-8000}:8000"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - PLANT_SERVICE_URL=http://plant-service:8002
+      - CHATBOT_SERVICE_URL=http://chatbot-service:8003
+      - SEARCH_SERVICE_URL=http://search-service:8004
+      - USER_SERVICE_URL=http://user-service:8005
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_redis_password}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-60}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - mp-network
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    container_name: mp-auth-service
+    ports:
+      - "${AUTH_SERVICE_PORT:-8001}:8001"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_AUTH_USER:-mp_auth_user}:${POSTGRES_AUTH_PASSWORD:-dev_auth_password}@postgres-auth:5432/${POSTGRES_AUTH_DB:-medicinal_plants_auth}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_redis_password}
+      - REDIS_DB=0
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      - JWT_REFRESH_TOKEN_EXPIRE_DAYS=${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-7}
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mp-network
+
+  plant-service:
+    build:
+      context: ./services/plant-service
+      dockerfile: Dockerfile
+    container_name: mp-plant-service
+    ports:
+      - "${PLANT_SERVICE_PORT:-8002}:8002"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_CORE_USER:-mp_core_user}:${POSTGRES_CORE_PASSWORD:-dev_core_password}@postgres-core:5432/${POSTGRES_CORE_DB:-medicinal_plants_core}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_redis_password}
+      - REDIS_DB=1
+      - PUBMED_API_KEY=${PUBMED_API_KEY:-}
+      - PUBMED_BASE_URL=${PUBMED_BASE_URL:-https://eutils.ncbi.nlm.nih.gov/entrez/eutils/}
+      - PUBCHEM_BASE_URL=${PUBCHEM_BASE_URL:-https://pubchem.ncbi.nlm.nih.gov/rest/pug/}
+    depends_on:
+      postgres-core:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mp-network
+
+  chatbot-service:
+    build:
+      context: ./services/chatbot-service
+      dockerfile: Dockerfile
+    container_name: mp-chatbot-service
+    ports:
+      - "${CHATBOT_SERVICE_PORT:-8003}:8003"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_CHATBOT_USER:-mp_chatbot_user}:${POSTGRES_CHATBOT_PASSWORD:-dev_chatbot_password}@postgres-chatbot:5432/${POSTGRES_CHATBOT_DB:-medicinal_plants_chatbot}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_redis_password}
+      - REDIS_DB=2
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-5-20250929}
+      - PLANT_SERVICE_URL=http://plant-service:8002
+    depends_on:
+      postgres-chatbot:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mp-network
+
+  search-service:
+    build:
+      context: ./services/search-service
+      dockerfile: Dockerfile
+    container_name: mp-search-service
+    ports:
+      - "${SEARCH_SERVICE_PORT:-8004}:8004"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - ELASTICSEARCH_HOST=elasticsearch
+      - ELASTICSEARCH_PORT=9200
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_redis_password}
+      - REDIS_DB=4
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mp-network
+
+  user-service:
+    build:
+      context: ./services/user-service
+      dockerfile: Dockerfile
+    container_name: mp-user-service
+    ports:
+      - "${USER_SERVICE_PORT:-8005}:8005"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER_USER:-mp_user_user}:${POSTGRES_USER_PASSWORD:-dev_user_password}@postgres-user:5432/${POSTGRES_USER_DB:-medicinal_plants_user}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_redis_password}
+      - REDIS_DB=3
+    depends_on:
+      postgres-user:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mp-network
+
+volumes:
+  postgres_core_data:
+  postgres_auth_data:
+  postgres_chatbot_data:
+  postgres_user_data:
+  redis_data:
+  elasticsearch_data:
+
+networks:
+  mp-network:
+    driver: bridge

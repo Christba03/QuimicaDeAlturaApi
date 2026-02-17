@@ -1,0 +1,102 @@
+services:
+  prometheus:
+    image: prom/prometheus:v2.50.0
+    container_name: mp-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - mp-network
+
+  grafana:
+    image: grafana/grafana:10.3.0
+    container_name: mp-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - mp-network
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: mp-alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    networks:
+      - mp-network
+
+  loki:
+    image: grafana/loki:2.9.4
+    container_name: mp-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - mp-network
+
+  promtail:
+    image: grafana/promtail:2.9.4
+    container_name: mp-promtail
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - mp-network
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: mp-postgres-exporter
+    environment:
+      DATA_SOURCE_URI: "postgres-core:5432/medicinal_plants_core?sslmode=disable"
+      DATA_SOURCE_USER: ${POSTGRES_CORE_USER:-mp_core_user}
+      DATA_SOURCE_PASS: ${POSTGRES_CORE_PASSWORD:-dev_core_password}
+    ports:
+      - "9187:9187"
+    networks:
+      - mp-network
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.58.0
+    container_name: mp-redis-exporter
+    environment:
+      REDIS_ADDR: "redis:6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev_redis_password}
+    ports:
+      - "9121:9121"
+    networks:
+      - mp-network
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+
+networks:
+  mp-network:
+    external: true
+    name: quimicadealtura_api_mp-network
