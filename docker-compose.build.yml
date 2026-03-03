@@ -1,0 +1,62 @@
+version: '3.8'
+
+# Optimized build configuration for production
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.build.yml build
+
+services:
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile.prod
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+      cache_from:
+        - quimicadealtura_api-auth-service:latest
+        - quimicadealtura_api-auth-service:dependencies
+        - quimicadealtura_api-auth-service:base
+    image: quimicadealtura_api-auth-service:prod
+
+  plant-service:
+    build:
+      context: ./services/plant-service
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+      cache_from:
+        - quimicadealtura_api-plant-service:latest
+    image: quimicadealtura_api-plant-service:prod
+
+  chatbot-service:
+    build:
+      context: ./services/chatbot-service
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+      cache_from:
+        - quimicadealtura_api-chatbot-service:latest
+    image: quimicadealtura_api-chatbot-service:prod
+
+  search-service:
+    build:
+      context: ./services/search-service
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+      cache_from:
+        - quimicadealtura_api-search-service:latest
+    image: quimicadealtura_api-search-service:prod
+
+  user-service:
+    build:
+      context: ./services/user-service
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+      cache_from:
+        - quimicadealtura_api-user-service:latest
+    image: quimicadealtura_api-user-service:prod
+
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+      cache_from:
+        - quimicadealtura_api-api-gateway:latest
+    image: quimicadealtura_api-api-gateway:prod

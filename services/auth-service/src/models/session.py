@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models import Base
@@ -17,9 +17,18 @@ class UserSession(Base):
     )
     refresh_token: Mapped[str] = mapped_column(String(500), nullable=False, unique=True, index=True)
     ip_address: Mapped[str] = mapped_column(String(45), nullable=True)
-    user_agent: Mapped[str] = mapped_column(String(500), nullable=True)
+    user_agent: Mapped[str] = mapped_column(Text, nullable=True)
+    device_info: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    device_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    device_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    device_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    is_trusted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    trusted_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_activity_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, onupdate=func.now()
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
 
     user = relationship("User", back_populates="sessions")
 

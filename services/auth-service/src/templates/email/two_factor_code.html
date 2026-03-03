@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Two-Factor Authentication Code</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background-color: #f4f4f4; padding: 20px; border-radius: 5px;">
+        <h1 style="color: #2c3e50;">Two-Factor Authentication Code</h1>
+        <p>Hello {% if first_name %}{{ first_name }}{% else %}User{% endif %},</p>
+        <p>Your two-factor authentication code is:</p>
+        <div style="background-color: #fff; border: 2px solid #27ae60; border-radius: 5px; padding: 20px; text-align: center; margin: 20px 0;">
+            <h2 style="color: #27ae60; font-size: 32px; letter-spacing: 5px; margin: 0;">{{ code }}</h2>
+        </div>
+        <p>This code will expire in 10 minutes.</p>
+        <p><strong>If you didn't request this code, please secure your account immediately.</strong></p>
+        <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+        <p style="font-size: 12px; color: #999;">This is an automated message, please do not reply.</p>
+    </div>
+</body>
+</html>

@@ -1,0 +1,38 @@
+# Required Jenkins plugins for CI/CD
+# Install via: jenkins-plugin-cli --plugins $(cat jenkins/plugins.txt | tr '\n' ' ')
+
+# Core plugins
+workflow-aggregator
+pipeline-stage-view
+blueocean
+
+# Docker
+docker-workflow
+docker-plugin
+
+# Git
+git
+github
+github-branch-source
+
+# Testing & Quality
+junit
+coverage
+htmlpublisher
+
+# Notifications
+email-ext
+slack
+
+# Utilities
+timestamper
+build-timeout
+ws-cleanup
+ansicolor
+
+# Credentials
+credentials-binding
+ssh-credentials
+
+# Build tools
+shiningpanda  # Python support

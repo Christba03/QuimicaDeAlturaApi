@@ -190,7 +190,6 @@ CREATE TABLE users (
     notification_preferences JSONB DEFAULT '{"email": true, "push": false}',
     
     -- Status
-    is_active BOOLEAN DEFAULT TRUE,
     is_banned BOOLEAN DEFAULT FALSE,
     ban_reason TEXT,
     banned_at TIMESTAMP WITH TIME ZONE,
@@ -205,8 +204,8 @@ CREATE TABLE users (
     locked_until TIMESTAMP WITH TIME ZONE,
     
     -- Metadata
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     deleted_at TIMESTAMP WITH TIME ZONE, -- Soft delete
     
     -- Constraints
@@ -239,10 +238,9 @@ CREATE TABLE roles (
     hierarchy_level INTEGER NOT NULL,
     
     -- Status
-    is_active BOOLEAN DEFAULT TRUE,
     
     -- Metadata
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -279,11 +277,10 @@ CREATE TABLE permissions (
     */
     
     -- Status
-    is_active BOOLEAN DEFAULT TRUE,
     
     -- Metadata
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     
     UNIQUE(resource_type, action)
 );
@@ -346,7 +343,7 @@ CREATE TABLE role_permissions (
     additional_conditions JSONB DEFAULT '{}',
     
     -- Metadata
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     created_by UUID REFERENCES users(id),
     
     UNIQUE(role_id, permission_id)
@@ -413,7 +410,7 @@ CREATE TABLE user_roles (
     role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
     
     -- Temporal validity
-    valid_from TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    valid_from TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     valid_until TIMESTAMP WITH TIME ZONE,
     
     -- Assignment context
@@ -421,10 +418,9 @@ CREATE TABLE user_roles (
     assignment_reason TEXT,
     
     -- Status
-    is_active BOOLEAN DEFAULT TRUE,
     
     -- Metadata
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     
     UNIQUE(user_id, role_id)
 );
@@ -435,32 +431,29 @@ CREATE INDEX idx_user_roles_validity ON user_roles(valid_from, valid_until) WHER
 
 COMMENT ON TABLE user_roles IS 'User role assignments with temporal validity';
 
--- User sessions (for Redis coordination)
+-- User sessions
 CREATE TABLE user_sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     
     -- Session data
-    session_token VARCHAR(255) NOT NULL UNIQUE,
-    redis_key VARCHAR(255) NOT NULL,
+    refresh_token VARCHAR(500) NOT NULL UNIQUE,
     
     -- Session metadata
-    ip_address INET,
+    ip_address VARCHAR(45),
     user_agent TEXT,
     device_info JSONB,
     
     -- Validity
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    last_activity_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_activity_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     
     -- Status
-    is_active BOOLEAN DEFAULT TRUE,
-    invalidated_at TIMESTAMP WITH TIME ZONE,
-    invalidation_reason TEXT
 );
 
-CREATE INDEX idx_sessions_user ON user_sessions(user_id) WHERE is_active = TRUE;
-CREATE INDEX idx_sessions_token ON user_sessions(session_token) WHERE is_active = TRUE;
-CREATE INDEX idx_sessions_expires ON user_sessions(expires_at) WHERE is_active = TRUE;
+CREATE INDEX idx_sessions_user_id ON user_sessions(user_id);
+CREATE INDEX idx_sessions_refresh_token ON user_sessions(refresh_token) WHERE is_active = TRUE;
+CREATE INDEX idx_sessions_expires_at ON user_sessions(expires_at);
 
+COMMENT ON TABLE user_sessions IS 'User sessions with refresh tokens';

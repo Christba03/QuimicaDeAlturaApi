@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: jenkins
+    user: root
+    ports:
+      - "${JENKINS_PORT:-8080}:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./plugins.txt:/usr/share/jenkins/ref/plugins.txt
+    environment:
+      - JENKINS_OPTS=--httpPort=8080
+    networks:
+      - jenkins-network
+    command: >
+      bash -c "
+        jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt &&
+        /usr/local/bin/jenkins.sh
+      "
+
+volumes:
+  jenkins_home:
+
+networks:
+  jenkins-network:
+    driver: bridge
