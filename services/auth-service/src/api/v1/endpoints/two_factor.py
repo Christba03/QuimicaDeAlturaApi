@@ -7,12 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.main import get_db
 from src.models.security_event import SecurityEventType
 from src.repositories.user_repository import UserRepository
-from src.config import settings
+from src.services.auth_service import AuthService
 from src.services.security_service import SecurityService
-from src.services.session_service import SessionService
 from src.services.two_factor_service import TwoFactorService
 from src.services.verification_service import VerificationService
-from src.utils.security import create_access_token, create_refresh_token, decode_token
+from src.utils.security import decode_token
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -47,6 +46,10 @@ def get_two_factor_service(session: AsyncSession = Depends(get_db)) -> TwoFactor
 
 def get_verification_service(session: AsyncSession = Depends(get_db)) -> VerificationService:
     return VerificationService(session)
+
+
+def get_auth_service(session: AsyncSession = Depends(get_db)) -> AuthService:
+    return AuthService(session)
 
 
 def get_security_service(session: AsyncSession = Depends(get_db)) -> SecurityService:
@@ -150,6 +153,7 @@ async def challenge_2fa(
     two_factor_service: TwoFactorService = Depends(get_two_factor_service),
     verification_service: VerificationService = Depends(get_verification_service),
     security_service: SecurityService = Depends(get_security_service),
+    auth_service: AuthService = Depends(get_auth_service),
     user_repo: UserRepository = Depends(get_user_repo),
 ):
     """Verify 2FA code during login and issue tokens."""
@@ -206,49 +210,16 @@ async def challenge_2fa(
         metadata={"method": method},
     )
 
-    # Now issue tokens
-    from datetime import datetime, timedelta, timezone
-
-    session_service = SessionService(user_repo.session)
-    role_names = [role.name for role in user.roles] if user.roles else []
-    token_data = {"sub": str(user.id), "email": user.email, "roles": role_names}
-
-    access_token = create_access_token(token_data)
-    refresh_token = create_refresh_token(token_data)
-
-    expires_at = datetime.now(timezone.utc) + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
-    
-    # Generate device fingerprint for session
-    from src.utils.device_fingerprint import generate_device_fingerprint, extract_device_name, detect_device_type
-    
-    device_fingerprint = generate_device_fingerprint(
-        user_agent=challenge_payload.get("user_agent"),
-        ip_address=challenge_payload.get("ip_address"),
-    )
-    device_name = extract_device_name(challenge_payload.get("user_agent"))
-    device_type = detect_device_type(challenge_payload.get("user_agent"))
-    
-    await session_service.create_session(
-        user_id=user.id,
-        refresh_token=refresh_token,
-        expires_at=expires_at,
+    # Issue tokens via AuthService (includes GeoIP enrichment and token family)
+    tokens = await auth_service.create_tokens(
+        user,
         ip_address=challenge_payload.get("ip_address"),
         user_agent=challenge_payload.get("user_agent"),
-        accept_language=None,  # Not available in challenge payload
-        device_fingerprint=device_fingerprint,
-        device_name=device_name,
-        device_type=device_type,
     )
-
-    await security_service.handle_successful_login(user, challenge_payload.get("ip_address"))
+    await auth_service.security_service.handle_successful_login(user, challenge_payload.get("ip_address"))
 
     logger.info("2fa.verified", user_id=str(user.id), method=method)
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "expires_in": settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-    }
+    return tokens
 
 
 @router.post("/request-email-code", status_code=status.HTTP_200_OK)

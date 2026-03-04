@@ -4,11 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.v1.dependencies import get_current_user
 from src.main import get_db
 from src.models.security_event import SecurityEventType
 from src.services.security_service import SecurityService
 from src.services.session_service import SessionService
-from src.utils.security import decode_token
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -36,26 +36,13 @@ def get_security_service(session: AsyncSession = Depends(get_db)) -> SecuritySer
     return SecurityService(session)
 
 
-def get_current_user_id(token: str) -> uuid.UUID:
-    """Extract user ID from access token."""
-    payload = decode_token(token)
-    if not payload or payload.get("type") != "access":
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    return uuid.UUID(payload["sub"])
-
-
 @router.get("/", response_model=list[SessionResponse], status_code=status.HTTP_200_OK)
 async def get_sessions(
-    authorization: str,
+    current_user: dict = Depends(get_current_user),
     session_service: SessionService = Depends(get_session_service),
 ):
     """Get all active sessions for the current user."""
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authorization header")
-
-    token = authorization[len("Bearer "):]
-    user_id = get_current_user_id(token)
-
+    user_id = uuid.UUID(current_user["sub"])
     sessions = await session_service.get_active_sessions(user_id)
 
     return [
@@ -79,16 +66,12 @@ async def get_sessions(
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_session(
     session_id: uuid.UUID,
-    authorization: str,
+    current_user: dict = Depends(get_current_user),
     session_service: SessionService = Depends(get_session_service),
     security_service: SecurityService = Depends(get_security_service),
 ):
     """Revoke a specific session."""
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authorization header")
-
-    token = authorization[len("Bearer "):]
-    user_id = get_current_user_id(token)
+    user_id = uuid.UUID(current_user["sub"])
 
     # Get session to verify ownership
     from src.models.session import UserSession
@@ -117,16 +100,12 @@ async def revoke_session(
 
 @router.delete("/all", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_all_sessions(
-    authorization: str,
+    current_user: dict = Depends(get_current_user),
     session_service: SessionService = Depends(get_session_service),
     security_service: SecurityService = Depends(get_security_service),
 ):
     """Revoke all sessions for the current user (except current one)."""
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authorization header")
-
-    token = authorization[len("Bearer "):]
-    user_id = get_current_user_id(token)
+    user_id = uuid.UUID(current_user["sub"])
 
     # Get current session's refresh token to exclude it
     from src.models.session import UserSession
@@ -153,15 +132,11 @@ async def revoke_all_sessions(
 @router.post("/devices/trust/{session_id}", status_code=status.HTTP_200_OK)
 async def trust_device(
     session_id: uuid.UUID,
-    authorization: str,
+    current_user: dict = Depends(get_current_user),
     session_service: SessionService = Depends(get_session_service),
 ):
     """Mark a device as trusted (skip 2FA for 30 days)."""
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authorization header")
-
-    token = authorization[len("Bearer "):]
-    user_id = get_current_user_id(token)
+    user_id = uuid.UUID(current_user["sub"])
 
     success = await session_service.mark_device_as_trusted(session_id, user_id)
     if not success:
@@ -174,15 +149,11 @@ async def trust_device(
 @router.delete("/devices/trust/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_device_trust(
     session_id: uuid.UUID,
-    authorization: str,
+    current_user: dict = Depends(get_current_user),
     session_service: SessionService = Depends(get_session_service),
 ):
     """Revoke trusted status from a device."""
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authorization header")
-
-    token = authorization[len("Bearer "):]
-    user_id = get_current_user_id(token)
+    user_id = uuid.UUID(current_user["sub"])
 
     success = await session_service.revoke_trusted_status(session_id, user_id)
     if not success:
@@ -194,15 +165,11 @@ async def revoke_device_trust(
 
 @router.get("/devices", response_model=list[SessionResponse], status_code=status.HTTP_200_OK)
 async def get_devices(
-    authorization: str,
+    current_user: dict = Depends(get_current_user),
     session_service: SessionService = Depends(get_session_service),
 ):
     """Get all devices (sessions) for the current user."""
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authorization header")
-
-    token = authorization[len("Bearer "):]
-    user_id = get_current_user_id(token)
+    user_id = uuid.UUID(current_user["sub"])
 
     sessions = await session_service.get_active_sessions(user_id)
 
