@@ -13,6 +13,7 @@ from arq.worker import Worker
 
 from src.config import settings
 from src.services.email_service import email_service
+from src.services.session_service import SessionService
 
 logger = structlog.get_logger()
 
@@ -44,11 +45,32 @@ async def send_email_task(
         raise  # Re-raise to trigger retry
 
 
+async def cleanup_sessions_task(ctx) -> int:
+    """
+    ARQ cron: delete expired user sessions.
+    Runs once per hour to keep the user_sessions table tidy.
+    """
+    from src.main import async_session_factory
+
+    async with async_session_factory() as session:
+        try:
+            svc = SessionService(session)
+            count = await svc.cleanup_expired_sessions()
+            await session.commit()
+            logger.info("cron.session_cleanup", deleted=count)
+            return count
+        except Exception as e:
+            await session.rollback()
+            logger.error("cron.session_cleanup_error", error=str(e))
+            raise
+
+
 class WorkerSettings:
     """ARQ worker settings."""
-    
+
     redis_settings = None  # Will be set from settings
-    functions = [send_email_task]
+    functions = [send_email_task, cleanup_sessions_task]
+    cron_jobs = [cron(cleanup_sessions_task, minute=0)]  # top of every hour
     max_jobs = 10
     job_timeout = 300  # 5 minutes
     
