@@ -140,6 +140,70 @@ pipeline {
             }
         }
         
+        stage('Bug Fix Tests') {
+            steps {
+                script {
+                    echo "Running bug fix regression tests..."
+                    sh '''
+                        cd services/auth-service
+
+                        # -----------------------------------------------
+                        # 1. Unit / mock tests — no running service needed
+                        # -----------------------------------------------
+                        echo "--- Unit tests (mocked Redis, code inspection) ---"
+                        docker-compose run --rm auth-service pytest tests/test_bug_fixes.py \
+                            -v --tb=short \
+                            -k "TestIPLockoutUnit or \
+                                TestTwoFactorTokenCreation or \
+                                TestOAuthLoginTracking or \
+                                TestGetCurrentUserDependency or \
+                                TestRequireSuperuserDependency or \
+                                TestJWTBlacklistInSessions" \
+                            || true
+
+                        # -----------------------------------------------
+                        # 2. Integration tests — require running service
+                        # -----------------------------------------------
+                        echo "--- Integration tests (live service on port 8001) ---"
+                        pip install -q pytest pytest-asyncio httpx sqlalchemy asyncpg
+                        pytest tests/test_bug_fixes.py \
+                            -v --tb=short \
+                            -k "TestEndpointProtectionIntegration or \
+                                TestIPLockoutIntegration or \
+                                test_sessions_endpoint_rejects_blacklisted_token" \
+                            || true
+
+                        # -----------------------------------------------
+                        # 3. DB tests — require postgres-auth
+                        # -----------------------------------------------
+                        echo "--- DB tests (require postgres-auth) ---"
+                        docker-compose run --rm auth-service pytest tests/test_bug_fixes.py \
+                            -v --tb=short \
+                            -k "test_handle_successful_login_updates_user_fields or \
+                                test_cleanup_expired_sessions" \
+                            || true
+                    '''
+                }
+            }
+            post {
+                always {
+                    script {
+                        // Capture JUnit results if pytest-junit is available
+                        sh '''
+                            cd services/auth-service
+                            docker-compose run --rm auth-service pytest tests/test_bug_fixes.py \
+                                --tb=short \
+                                --junit-xml=/tmp/bug_fix_results.xml \
+                                -q 2>/dev/null || true
+                            docker cp $(docker-compose ps -q auth-service 2>/dev/null | head -1):/tmp/bug_fix_results.xml \
+                                bug_fix_results.xml 2>/dev/null || true
+                        '''
+                        junit allowEmptyResults: true, testResults: 'bug_fix_results.xml'
+                    }
+                }
+            }
+        }
+
         stage('Feature Tests') {
             steps {
                 script {
