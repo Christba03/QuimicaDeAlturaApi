@@ -45,6 +45,8 @@ class User(Base):
     verification_codes = relationship("VerificationCode", back_populates="user", lazy="selectin", cascade="all, delete-orphan")
     backup_codes = relationship("TwoFactorBackupCode", back_populates="user", lazy="selectin", cascade="all, delete-orphan")
     security_events = relationship("SecurityEvent", back_populates="user", lazy="selectin", cascade="all, delete-orphan")
+    oauth_accounts = relationship("OAuthAccount", back_populates="user", lazy="selectin", cascade="all, delete-orphan")
+    api_keys = relationship("APIKey", back_populates="user", lazy="selectin", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<User(id={self.id}, email={self.email})>"
