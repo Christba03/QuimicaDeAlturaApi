@@ -218,7 +218,7 @@ CREATE TABLE users (
 CREATE INDEX idx_users_email ON users(email) WHERE deleted_at IS NULL;
 CREATE INDEX idx_users_username ON users(username) WHERE deleted_at IS NULL;
 CREATE INDEX idx_users_location ON users(state, city) WHERE deleted_at IS NULL;
-CREATE INDEX idx_users_active ON users(is_active) WHERE deleted_at IS NULL;
+CREATE INDEX idx_users_active ON users(is_banned) WHERE deleted_at IS NULL;
 
 COMMENT ON TABLE users IS 'Core user accounts with authentication and profile data';
 COMMENT ON COLUMN users.deleted_at IS 'Soft delete timestamp - NULL means active';
@@ -310,7 +310,7 @@ INSERT INTO permissions (resource_type, action, name, display_name, description)
 ('ARTICLE', 'UPDATE', 'article.update', 'Editar artículos', 'Puede editar referencias'),
 
 -- Comment permissions
-('COMMENT', 'READ', 'comment.read', 'Ver comentarios', 'Puede ),
+('COMMENT', 'READ', 'comment.read', 'Ver comentarios', 'Puede ver comentarios'),
 ('COMMENT', 'CREATE', 'comment.create', 'Crear comentarios', 'Puede crear comentarios'),
 ('COMMENT', 'UPDATE', 'comment.update', 'Editar comentarios', 'Puede editar sus comentarios'),
 ('COMMENT', 'DELETE', 'comment.delete', 'Eliminar comentarios', 'Puede eliminar comentarios'),
@@ -353,7 +353,7 @@ CREATE INDEX idx_role_permissions_role ON role_permissions(role_id);
 CREATE INDEX idx_role_permissions_permission ON role_permissions(permission_id);
 
 -- Assign default permissions to roles
-DO $
+DO $$
 DECLARE
     v_client_role_id UUID;
     v_researcher_role_id UUID;
@@ -402,7 +402,7 @@ BEGIN
     -- ADMIN gets everything
     INSERT INTO role_permissions (role_id, permission_id, is_granted)
     SELECT v_admin_role_id, id, TRUE FROM permissions;
-END $;
+END $$;
 
 CREATE TABLE user_roles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -416,12 +416,13 @@ CREATE TABLE user_roles (
     -- Assignment context
     assigned_by UUID REFERENCES users(id),
     assignment_reason TEXT,
-    
+
     -- Status
-    
+    is_active BOOLEAN DEFAULT TRUE NOT NULL,
+
     -- Metadata
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    
+
     UNIQUE(user_id, role_id)
 );
 
@@ -448,8 +449,9 @@ CREATE TABLE user_sessions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
     last_activity_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    
+
     -- Status
+    is_active BOOLEAN DEFAULT TRUE NOT NULL
 );
 
 CREATE INDEX idx_sessions_user_id ON user_sessions(user_id);

@@ -3,6 +3,29 @@
 
 -- Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "citext";
+
+-- ============================================================================
+-- SHARED ENUMS (replicated from auth/core schemas)
+-- ============================================================================
+CREATE TYPE preparation_method AS ENUM (
+    'INFUSION', 'DECOCTION', 'TINCTURE', 'POULTICE', 'ESSENTIAL_OIL',
+    'POWDER', 'FRESH', 'EXTRACT', 'CAPSULE', 'TEA', 'JUICE', 'PASTE', 'OTHER'
+);
+
+CREATE TYPE effectiveness_rating AS ENUM (
+    'HIGHLY_EFFECTIVE', 'MODERATELY_EFFECTIVE', 'SLIGHTLY_EFFECTIVE',
+    'NOT_EFFECTIVE', 'UNSURE', 'ADVERSE_REACTION'
+);
+
+CREATE TYPE severity_level AS ENUM (
+    'MILD', 'MODERATE', 'SEVERE', 'LIFE_THREATENING'
+);
+
+CREATE TYPE recommendation_type AS ENUM (
+    'ORGANIC', 'SPONSORED', 'HYBRID'
+);
+
 
 -- ============================================================================
 -- USER INTERACTION TRACKING
@@ -11,7 +34,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Search history
 CREATE TABLE user_search_history (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL,
     
     -- Search query
     search_query TEXT NOT NULL,
@@ -23,7 +46,7 @@ CREATE TABLE user_search_history (
     results_shown JSONB, -- Array of plant IDs shown
     
     -- User interaction
-    clicked_result_id UUID REFERENCES plants(id),
+    clicked_result_id UUID,
     click_position INTEGER, -- Position in results (1st, 2nd, etc.)
     time_to_click INTERVAL,
     
@@ -45,8 +68,8 @@ COMMENT ON TABLE user_search_history IS 'Complete search analytics for query opt
 -- Plant views
 CREATE TABLE user_plant_views (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE, -- NULL for anonymous
-    plant_id UUID NOT NULL REFERENCES plants(id) ON DELETE CASCADE,
+    user_id UUID, -- NULL for anonymous
+    plant_id UUID NOT NULL,
     
     -- View details
     view_duration INTERVAL, -- How long they viewed
@@ -66,7 +89,7 @@ CREATE TABLE user_plant_views (
     user_location JSONB,
     
     -- Session
-    session_id UUID REFERENCES user_sessions(id),
+    session_id UUID,
     
     -- Timestamp
     viewed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -79,8 +102,8 @@ CREATE INDEX idx_plant_views_session ON user_plant_views(session_id) WHERE sessi
 -- Favorites
 CREATE TABLE user_plant_favorites (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    plant_id UUID NOT NULL REFERENCES plants(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL,
+    plant_id UUID NOT NULL,
     
     -- Organization
     tags JSONB DEFAULT '[]', -- User-defined tags
@@ -103,9 +126,9 @@ CREATE INDEX idx_favorites_tags ON user_plant_favorites USING GIN(tags) WHERE is
 -- Usage reports (critical for effectiveness tracking)
 CREATE TABLE user_plant_usage_reports (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    plant_id UUID NOT NULL REFERENCES plants(id) ON DELETE CASCADE,
-    activity_id UUID REFERENCES medicinal_activities(id) ON DELETE SET NULL,
+    user_id UUID NOT NULL,
+    plant_id UUID NOT NULL,
+    activity_id UUID,
     
     -- Usage details
     plant_part_used VARCHAR(100),
@@ -142,7 +165,7 @@ CREATE TABLE user_plant_usage_reports (
     side_effects_description TEXT,
     
     -- Verification
-    verified_by_researcher UUID REFERENCES users(id),
+    verified_by_researcher UUID,
     verification_notes TEXT,
     is_clinically_significant BOOLEAN,
     
@@ -166,8 +189,8 @@ COMMENT ON TABLE user_plant_usage_reports IS 'Real-world usage data for effectiv
 -- Comments and reviews
 CREATE TABLE user_comments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    plant_id UUID REFERENCES plants(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL,
+    plant_id UUID,
     
     -- Comment data
     comment_text TEXT NOT NULL,
@@ -183,7 +206,7 @@ CREATE TABLE user_comments (
     -- Moderation
     is_moderated BOOLEAN DEFAULT FALSE,
     moderation_status VARCHAR(50) DEFAULT 'pending', -- 'pending', 'approved', 'rejected', 'flagged'
-    moderated_by UUID REFERENCES users(id),
+    moderated_by UUID,
     moderated_at TIMESTAMP WITH TIME ZONE,
     moderation_reason TEXT,
     
@@ -212,7 +235,7 @@ CREATE INDEX idx_comments_moderation ON user_comments(moderation_status) WHERE i
 CREATE TABLE comment_votes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     comment_id UUID NOT NULL REFERENCES user_comments(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL,
     
     vote_type VARCHAR(20) NOT NULL, -- 'helpful', 'unhelpful'
     
@@ -227,8 +250,8 @@ CREATE INDEX idx_comment_votes_user ON comment_votes(user_id);
 -- Effectiveness reports (simplified separate table for easier analytics)
 CREATE TABLE user_effectiveness_reports (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    plant_id UUID NOT NULL REFERENCES plants(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL,
+    plant_id UUID NOT NULL,
     usage_report_id UUID REFERENCES user_plant_usage_reports(id) ON DELETE CASCADE,
     
     -- Simple effectiveness tracking
@@ -249,8 +272,8 @@ CREATE INDEX idx_effectiveness_user ON user_effectiveness_reports(user_id);
 -- Side effect reports
 CREATE TABLE user_side_effect_reports (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    plant_id UUID NOT NULL REFERENCES plants(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL,
+    plant_id UUID NOT NULL,
     usage_report_id UUID REFERENCES user_plant_usage_reports(id) ON DELETE CASCADE,
     
     -- Side effect details
@@ -269,7 +292,7 @@ CREATE TABLE user_side_effect_reports (
     
     -- Verification
     verified_by_medical_professional BOOLEAN DEFAULT FALSE,
-    verifying_researcher UUID REFERENCES users(id),
+    verifying_researcher UUID,
     
     -- Status
     is_public BOOLEAN DEFAULT TRUE,
@@ -308,7 +331,7 @@ CREATE TABLE sponsors (
     
     -- Verification
     is_verified BOOLEAN DEFAULT FALSE,
-    verified_by UUID REFERENCES users(id),
+    verified_by UUID,
     verified_at TIMESTAMP WITH TIME ZONE,
     
     -- Contract
@@ -323,7 +346,7 @@ CREATE TABLE sponsors (
     
     -- Metadata
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES users(id),
+    created_by UUID,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP WITH TIME ZONE
 );
@@ -334,7 +357,7 @@ CREATE INDEX idx_sponsors_contract ON sponsors(contract_end_date) WHERE is_activ
 CREATE TABLE sponsored_plants (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     sponsor_id UUID NOT NULL REFERENCES sponsors(id) ON DELETE CASCADE,
-    plant_id UUID NOT NULL REFERENCES plants(id) ON DELETE CASCADE,
+    plant_id UUID NOT NULL,
     
     -- Sponsorship details
     sponsorship_type VARCHAR(50), -- 'featured', 'promoted', 'research_funded'
@@ -380,7 +403,7 @@ CREATE INDEX idx_sponsored_plants_validity ON sponsored_plants(valid_until) WHER
 CREATE TABLE sponsored_compounds (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     sponsor_id UUID NOT NULL REFERENCES sponsors(id) ON DELETE CASCADE,
-    compound_id UUID NOT NULL REFERENCES chemical_compounds(id) ON DELETE CASCADE,
+    compound_id UUID NOT NULL,
     
     -- Similar structure to sponsored_plants
     sponsorship_type VARCHAR(50),
@@ -420,12 +443,12 @@ CREATE TABLE sponsor_clicks (
     sponsored_compound_id UUID REFERENCES sponsored_compounds(id) ON DELETE CASCADE,
     
     -- Who clicked
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    session_id UUID REFERENCES user_sessions(id) ON DELETE SET NULL,
+    user_id UUID,
+    session_id UUID,
     
     -- Context
-    plant_id UUID REFERENCES plants(id),
-    compound_id UUID REFERENCES chemical_compounds(id),
+    plant_id UUID,
+    compound_id UUID,
     page_url TEXT,
     position_on_page VARCHAR(100), -- 'top_banner', 'sidebar', 'inline_result'
     
@@ -476,8 +499,8 @@ CREATE INDEX idx_conversions_timestamp ON sponsor_conversions(converted_at DESC)
 -- Recommendation algorithm decision log
 CREATE TABLE recommendation_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    session_id UUID REFERENCES user_sessions(id) ON DELETE SET NULL,
+    user_id UUID,
+    session_id UUID,
     
     -- Request context
     query TEXT,
@@ -538,7 +561,7 @@ CREATE TABLE audit_log (
     changed_fields JSONB, -- Array of field names
     
     -- Who and when
-    user_id UUID REFERENCES users(id),
+    user_id UUID,
     ip_address INET,
     user_agent TEXT,
     

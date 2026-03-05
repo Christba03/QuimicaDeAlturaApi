@@ -174,3 +174,19 @@ async def get_compounds_for_plant(
         }
         for hit in response["hits"]["hits"]
     ]
+
+
+class RecommendationService:
+    """Thin class wrapper around module-level recommendation functions for DI compatibility."""
+
+    def __init__(self, settings=None):
+        pass
+
+    async def get_related_plants(self, plant_id: str, limit: int = 5) -> dict:
+        return await get_related_plants(plant_id=plant_id, limit=limit)
+
+    async def get_similar_compounds(self, compound_id: str, limit: int = 5) -> dict:
+        return await get_similar_compounds(compound_id=compound_id, limit=limit)
+
+    async def get_user_recommendations(self, user_id: str, limit: int = 10) -> dict:
+        return await get_plants_for_activity(activity_id=user_id, limit=limit)

@@ -10,9 +10,10 @@ router = APIRouter(tags=["health"])
 
 DOWNSTREAM_SERVICES = {
     "auth": settings.auth_service_url,
-    "inventory": settings.inventory_service_url,
-    "order": settings.order_service_url,
-    "notification": settings.notification_service_url,
+    "plant": settings.plant_service_url,
+    "chatbot": settings.chatbot_service_url,
+    "search": settings.search_service_url,
+    "user": settings.user_service_url,
 }
 
 

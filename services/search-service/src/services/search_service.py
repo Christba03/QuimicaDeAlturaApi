@@ -218,3 +218,39 @@ async def get_document_by_id(index: str, doc_id: str) -> dict[str, Any] | None:
         return {"id": resp["_id"], "index": resp["_index"], **resp["_source"]}
     except Exception:
         return None
+
+
+class SearchService:
+    """Thin class wrapper around module-level search functions for DI compatibility."""
+
+    def __init__(self, settings=None):
+        pass
+
+    async def search(self, query: str, filters: dict | None = None, page: int = 1, page_size: int = 20) -> dict:
+        filters = filters or {}
+        return await full_text_search(
+            query=query,
+            family=filters.get("family"),
+            region=filters.get("state"),
+            page=page,
+            page_size=page_size,
+        )
+
+    async def get_facets(self, query: str = "") -> dict:
+        result = await full_text_search(query=query or "*", include_facets=True, page_size=0)
+        return result.get("facets", {})
+
+    async def autocomplete(self, query: str, suggestion_type: str = "all", limit: int = 10) -> list:
+        indices = None
+        if suggestion_type == "plant":
+            indices = [settings.ES_INDEX_PLANTS]
+        elif suggestion_type == "compound":
+            indices = [settings.ES_INDEX_COMPOUNDS]
+        result = await full_text_search(query=query, indices=indices, page_size=limit, include_facets=False)
+        hits = result.get("hits", [])
+        return [{"id": h.get("id"), "label": h.get("scientific_name") or h.get("name", "")} for h in hits]
+
+    async def get_popular_searches(self, limit: int = 10) -> list:
+        result = await full_text_search(query="*", page_size=limit, include_facets=False)
+        hits = result.get("hits", [])
+        return [h.get("scientific_name") or h.get("name", "") for h in hits]

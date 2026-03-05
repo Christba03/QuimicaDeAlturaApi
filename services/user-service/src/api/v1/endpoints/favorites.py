@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as aioredis
 
-from src.main import get_db, get_redis
+from src.dependencies import get_db, get_redis
 from src.repositories.user_repository import UserRepository
 
 router = APIRouter()

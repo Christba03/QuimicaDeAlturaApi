@@ -6,6 +6,46 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
+
+-- ============================================================================
+-- SHARED ENUMS (replicated from auth schema)
+-- ============================================================================
+CREATE TYPE verification_status AS ENUM (
+    'UNVERIFIED',
+    'UNDER_REVIEW',
+    'VERIFIED',
+    'REJECTED',
+    'NEEDS_MORE_DATA',
+    'CONFLICTING_DATA'
+);
+
+CREATE TYPE data_source_type AS ENUM (
+    'PUBMED', 'DOI', 'KEGG', 'NCBI', 'BLAST', 'CHEBI', 'CHEMSPIDER',
+    'PUBCHEM', 'CONABIO', 'ETHNOBOTANICAL_RECORD', 'USER_CONTRIBUTION',
+    'MANUAL_ENTRY', 'WEB_SCRAPING', 'RESEARCHER_UPLOAD'
+);
+
+CREATE TYPE compound_inference_method AS ENUM (
+    'DIRECT_LITERATURE', 'GENE_CLUSTER_SIMILARITY', 'ENZYME_HOMOLOGY',
+    'PATHWAY_RECONSTRUCTION', 'FASTA_ALIGNMENT', 'BLAST_ALIGNMENT',
+    'MOLECULAR_SIMILARITY', 'USER_REPORTED'
+);
+
+CREATE TYPE preparation_method AS ENUM (
+    'INFUSION', 'DECOCTION', 'TINCTURE', 'POULTICE', 'ESSENTIAL_OIL',
+    'POWDER', 'FRESH', 'EXTRACT', 'CAPSULE', 'TEA', 'JUICE', 'PASTE', 'OTHER'
+);
+
+CREATE TYPE toxicity_level AS ENUM (
+    'NONE', 'LOW', 'MODERATE', 'HIGH', 'SEVERE', 'UNKNOWN'
+);
+
+CREATE TYPE evidence_level AS ENUM (
+    'LEVEL_1_PEER_REVIEWED', 'LEVEL_2_PHYTOCHEMICAL_DB',
+    'LEVEL_3_ETHNOBOTANICAL', 'LEVEL_4_GENOMIC_INFERENCE', 'LEVEL_5_USER_REPORTED'
+);
+
+
 -- ============================================================================
 -- TAXONOMIC AND PLANT DATA (Enhanced from v1.0)
 -- ============================================================================
@@ -18,14 +58,14 @@ CREATE TABLE taxonomic_families (
     
     -- Verification
     verification_status verification_status DEFAULT 'VERIFIED',
-    verified_by UUID REFERENCES users(id),
+    verified_by UUID,
     verified_at TIMESTAMP WITH TIME ZONE,
     
     -- Metadata
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES users(id),
+    created_by UUID,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_by UUID REFERENCES users(id),
+    updated_by UUID,
     deleted_at TIMESTAMP WITH TIME ZONE
 );
 
@@ -40,14 +80,14 @@ CREATE TABLE taxonomic_genera (
     
     -- Verification
     verification_status verification_status DEFAULT 'VERIFIED',
-    verified_by UUID REFERENCES users(id),
+    verified_by UUID,
     verified_at TIMESTAMP WITH TIME ZONE,
     
     -- Metadata
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES users(id),
+    created_by UUID,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_by UUID REFERENCES users(id),
+    updated_by UUID,
     deleted_at TIMESTAMP WITH TIME ZONE
 );
 
@@ -81,7 +121,7 @@ CREATE TABLE plants (
     
     -- Verification workflow
     verification_status verification_status DEFAULT 'UNVERIFIED',
-    verified_by UUID REFERENCES users(id),
+    verified_by UUID,
     verified_at TIMESTAMP WITH TIME ZONE,
     
     -- Quality metrics
@@ -101,9 +141,9 @@ CREATE TABLE plants (
     
     -- Metadata
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES users(id),
+    created_by UUID,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_by UUID REFERENCES users(id),
+    updated_by UUID,
     deleted_at TIMESTAMP WITH TIME ZONE,
     
     -- Full-text search
@@ -142,12 +182,12 @@ CREATE TABLE plant_versions (
     
     -- Version metadata
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES users(id),
+    created_by UUID,
     change_reason TEXT,
     
     -- Verification at version level
     verification_status verification_status,
-    verified_by UUID REFERENCES users(id),
+    verified_by UUID,
     verified_at TIMESTAMP WITH TIME ZONE,
     
     UNIQUE(plant_id, version_number)
@@ -179,7 +219,7 @@ CREATE TABLE plant_names (
     
     -- Verification
     is_verified BOOLEAN DEFAULT FALSE,
-    verified_by UUID REFERENCES users(id),
+    verified_by UUID,
     verified_at TIMESTAMP WITH TIME ZONE,
     
     -- Source
@@ -191,11 +231,11 @@ CREATE TABLE plant_names (
     
     -- Metadata
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES users(id),
+    created_by UUID,
     deleted_at TIMESTAMP WITH TIME ZONE
 );
 
-CREATE INDEX idx_plant_names_plaplant_names(plant_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_plant_names_plant ON plant_names(plant_id) WHERE deleted_at IS NULL;
 CREATE INDEX idx_plant_names_type ON plant_names(name_type) WHERE deleted_at IS NULL;
 CREATE INDEX idx_plant_names_language ON plant_names(language) WHERE deleted_at IS NULL;
 CREATE INDEX idx_plant_names_region ON plant_names(region) WHERE deleted_at IS NULL;
@@ -213,7 +253,7 @@ CREATE TABLE plant_verification_workflow (
     to_status verification_status NOT NULL,
     
     -- Review details
-    reviewer_id UUID REFERENCES users(id),
+    reviewer_id UUID,
     review_notes TEXT,
     review_checklist JSONB, -- Structured review criteria
     
@@ -285,14 +325,14 @@ CREATE TABLE chemical_compounds (
     
     -- Verification
     verification_status verification_status DEFAULT 'UNVERIFIED',
-    verified_by UUID REFERENCES users(id),
+    verified_by UUID,
     verified_at TIMESTAMP WITH TIME ZONE,
     
     -- Metadata
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES users(id),
+    created_by UUID,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_by UUID REFERENCES users(id),
+    updated_by UUID,
     deleted_at TIMESTAMP WITH TIME ZONE,
     
     -- Full-text search
@@ -326,21 +366,21 @@ CREATE TABLE plant_compounds (
     
     -- Verification
     verification_status verification_status DEFAULT 'UNVERIFIED',
-    verified_by UUID REFERENCES users(id),
+    verified_by UUID,
     verified_at TIMESTAMP WITH TIME ZONE,
     
     -- Source attribution
     source_references JSONB, -- Array of article IDs or URLs
     
     -- User contribution tracking
-    contributed_by UUID REFERENCES users(id),
+    contributed_by UUID,
     contribution_date TIMESTAMP WITH TIME ZONE,
     
     -- Metadata
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES users(id),
+    created_by UUID,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_by UUID REFERENCES users(id),
+    updated_by UUID,
     deleted_at TIMESTAMP WITH TIME ZONE,
     
     UNIQUE(plant_id, compound_id, plant_part)
@@ -380,12 +420,12 @@ CREATE TABLE medicinal_activities (
     
     -- Verification
     verification_status verification_status DEFAULT 'VERIFIED',
-    verified_by UUID REFERENCES users(id),
+    verified_by UUID,
     verified_at TIMESTAMP WITH TIME ZONE,
     
     -- Metadata
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES users(id),
+    created_by UUID,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP WITH TIME ZONE,
     
@@ -410,7 +450,7 @@ CREATE TABLE plant_activities (
     
     -- Verification status
     verification_status verification_status DEFAULT 'UNVERIFIED',
-    verified_by UUID REFERENCES users(id),
+    verified_by UUID,
     verified_at TIMESTAMP WITH TIME ZONE,
     
     -- Supporting evidence
@@ -423,7 +463,7 @@ CREATE TABLE plant_activities (
     geographic_usage JSONB,
     
     -- User contribution
-    contributed_by UUID REFERENCES users(id),
+    contributed_by UUID,
     contribution_date TIMESTAMP WITH TIME ZONE,
     
     -- Efficacy data from user reports (aggregated)
@@ -432,9 +472,9 @@ CREATE TABLE plant_activities (
     
     -- Metadata
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES users(id),
+    created_by UUID,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_by UUID REFERENCES users(id),
+    updated_by UUID,
     deleted_at TIMESTAMP WITH TIME ZONE,
     
     UNIQUE(plant_id, activity_id, plant_part, preparation_method)
@@ -473,11 +513,11 @@ CREATE TABLE research_gaps (
     status VARCHAR(50) DEFAULT 'identified', -- 'identified', 'under_investigation', 'resolved', 'dismissed'
     resolution_notes TEXT,
     resolved_at TIMESTAMP WITH TIME ZONE,
-    resolved_by UUID REFERENCES users(id),
+    resolved_by UUID,
     
     -- Metadata
     identified_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    identified_by UUID REFERENCES users(id),
+    identified_by UUID,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -536,12 +576,12 @@ CREATE TABLE scientific_articles (
     peer_reviewed BOOLEAN DEFAULT TRUE,
     
     -- User contribution
-    uploaded_by UUID REFERENCES users(id),
+    uploaded_by UUID,
     upload_notes TEXT,
     
     -- Verification
     verification_status verification_status DEFAULT 'UNVERIFIED',
-    verified_by UUID REFERENCES users(id),
+    verified_by UUID,
     verified_at TIMESTAMP WITH TIME ZONE,
     
     -- Metadata
@@ -575,7 +615,7 @@ CREATE TABLE article_plant_associations (
     extracted_data JSONB,
     
     -- Created by researcher or automated
-    created_by UUID REFERENCES users(id),
+    created_by UUID,
     is_automated BOOLEAN DEFAULT FALSE,
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -596,7 +636,7 @@ CREATE TABLE article_compound_associations (
     relevance_score NUMERIC(3,2) CHECK (relevance_score BETWEEN 0 AND 1),
     key_findings TEXT,
     
-    created_by UUID REFERENCES users(id),
+    created_by UUID,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
     UNIQUE(article_id, compound_id)
@@ -715,11 +755,11 @@ CREATE TABLE genomic_sequences (
     source_url TEXT,
     
     -- User contribution
-    uploaded_by UUID REFERENCES users(id),
+    uploaded_by UUID,
     
     -- Verification
     verification_status verification_status DEFAULT 'UNVERIFIED',
-    verified_by UUID REFERENCES users(id),
+    verified_by UUID,
     verified_at TIMESTAMP WITH TIME ZONE,
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -779,7 +819,7 @@ CREATE TABLE probability_weight_schemas (
     is_active BOOLEAN DEFAULT TRUE,
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES users(id),
+    created_by UUID,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -847,197 +887,85 @@ CREATE TABLE redis_cache_metadata (
 -- ============================================================================
 
 -- Most searched plants
+-- mv_most_searched_plants references user_search_history which is in the user DB
+-- Using denormalized counts from plants table instead
 CREATE MATERIALIZED VIEW mv_most_searched_plants AS
 SELECT 
     p.id,
     p.scientific_name,
-    COUNT(DISTINCT ush.id) AS search_count,
-    COUNT(DISTINCT ush.user_id) AS unique_searchers,
-    COUNT(DISTINCT CASE WHEN ush.clicked_result_id IS NOT NULL THEN ush.id END) AS click_count,
-    ROUND(
-        COUNT(DISTINCT CASE WHEN ush.clicked_result_id IS NOT NULL THEN ush.id END)::numeric / 
-        NULLIF(COUNT(DISTINCT ush.id), 0) * 100, 
-        2
-    ) AS click_through_rate,
-    MAX(ush.searched_at) AS last_searched_at
+    p.view_count AS search_count,
+    p.favorite_count,
+    p.usage_report_count
 FROM plants p
-LEFT JOIN user_search_history ush ON p.id = ush.clicked_result_id
 WHERE p.deleted_at IS NULL
-GROUP BY p.id, p.scientific_name
-ORDER BY search_count DESC;
+ORDER BY p.view_count DESC;
 
 CREATE UNIQUE INDEX ON mv_most_searched_plants (id);
 
--- Most viewed plants
+-- Most viewed plants (uses denormalized counts from plants table)
 CREATE MATERIALIZED VIEW mv_most_viewed_plants AS
-SELECT 
-    p.id,
-    p.scientific_name,
-    COUNT(DISTINCT upv.id) AS view_count,
-    COUNT(DISTINCT upv.user_id) FILTER (WHERE upv.user_id IS NOT NULL) AS unique_viewers,
-    ROUND(AVG(EXTRACT(EPOCH FROM upv.view_duration)), 2) AS avg_view_duration_seconds,
-    ROUND(AVG(upv.depth_score), 3) AS avg_depth_score,
-    MAX(upv.viewed_at) AS last_viewed_at
-FROM plants p
-LEFT JOIN user_plant_views upv ON p.id = upv.plant_id
-WHERE p.deleted_at IS NULL
-GROUP BY p.id, p.scientific_name
+SELECT id, scientific_name, view_count, favorite_count, usage_report_count
+FROM plants
+WHERE deleted_at IS NULL
 ORDER BY view_count DESC;
 
 CREATE UNIQUE INDEX ON mv_most_viewed_plants (id);
 
--- Most favorited plants
+-- Most favorited plants (uses denormalized counts)
 CREATE MATERIALIZED VIEW mv_most_favorited_plants AS
-SELECT 
-    p.id,
-    p.scientific_name,
-    COUNT(DISTINCT upf.user_id) AS favorite_count,
-    MAX(upf.favorited_at) AS last_favorited_at
-FROM plants p
-LEFT JOIN user_plant_favorites upf ON p.id = upf.plant_id AND upf.is_active = TRUE
-WHERE p.deleted_at IS NULL
-GROUP BY p.id, p.scientific_name
+SELECT id, scientific_name, favorite_count, view_count
+FROM plants
+WHERE deleted_at IS NULL
 ORDER BY favorite_count DESC;
 
 CREATE UNIQUE INDEX ON mv_most_favorited_plants (id);
 
--- Most used plants (with effectiveness)
+-- Most used plants (uses denormalized counts)
 CREATE MATERIALIZED VIEW mv_most_used_plants AS
-SELECT 
-    p.id,
-    p.scientific_name,
-    COUNT(DISTINCT upur.id) AS usage_report_count,
-    COUNT(DISTINCT upur.user_id) AS unique_users,
-    ROUND(AVG(
-        CASE upur.effectiveness_rating
-            WHEN 'HIGHLY_EFFECTIVE' THEN 5
-            WHEN 'MODERATELY_EFFECTIVE' THEN 4
-            WHEN 'SLIGHTLY_EFFECTIVE' THEN 3
-            WHEN 'NOT_EFFECTIVE' THEN 2
-            WHEN 'UNSURE' THEN NULL
-            WHEN 'ADVERSE_REACTION' THEN 1
-        END
-    ), 2) AS avg_effectiveness_score,
-    COUNT(DISTINCT CASE WHEN upur.effectiveness_rating IN ('HIGHLY_EFFECTIVE', 'MODERATELY_EFFECTIVE') 
-        THEN upur.id END) AS positive_report_count,
-    COUNT(DISTINCT CASE WHEN upur.side_effects_observed = TRUE 
-        THEN upur.id END) AS side_effect_report_count,
-    MAX(upur.reported_at) AS last_reported_at
-FROM plants p
-LEFT JOIN user_plant_usage_reports upur ON p.id = upur.plant_id
-WHERE p.deleted_at IS NULL
-GROUP BY p.id, p.scientific_name
+SELECT id, scientific_name, usage_report_count, user_trust_score
+FROM plants
+WHERE deleted_at IS NULL
 ORDER BY usage_report_count DESC;
 
 CREATE UNIQUE INDEX ON mv_most_used_plants (id);
 
--- Plants with high effectiveness but low scientific evidence
+-- Plants with high trust score but low scientific evidence
 CREATE MATERIALIZED VIEW mv_high_effectiveness_low_evidence AS
 SELECT 
     p.id,
     p.scientific_name,
     p.verification_status,
     p.scientific_evidence_score,
+    p.user_trust_score,
+    p.usage_report_count,
     COUNT(DISTINCT pc.id) FILTER (WHERE pc.evidence_level = 'LEVEL_1_PEER_REVIEWED') AS peer_reviewed_compound_count,
-    COUNT(DISTINCT pa.id) FILTER (WHERE pa.evidence_level = 'LEVEL_1_PEER_REVIEWED') AS peer_reviewed_activity_count,
-    COUNT(DISTINCT upur.id) AS usage_report_count,
-    ROUND(AVG(
-        CASE upur.effectiveness_rating
-            WHEN 'HIGHLY_EFFECTIVE' THEN 5
-            WHEN 'MODERATELY_EFFECTIVE' THEN 4
-            WHEN 'SLIGHTLY_EFFECTIVE' THEN 3
-            ELSE 2
-        END
-    ), 2) AS avg_effectiveness_score
+    COUNT(DISTINCT pa.id) FILTER (WHERE pa.evidence_level = 'LEVEL_1_PEER_REVIEWED') AS peer_reviewed_activity_count
 FROM plants p
 LEFT JOIN plant_compounds pc ON p.id = pc.plant_id AND pc.deleted_at IS NULL
 LEFT JOIN plant_activities pa ON p.id = pa.plant_id AND pa.deleted_at IS NULL
-LEFT JOIN user_plant_usage_reports upur ON p.id = upur.plant_id
 WHERE p.deleted_at IS NULL
-GROUP BY p.id, p.scientific_name, p.verification_status, p.scientific_evidence_score
-HAVING 
-    COUNT(DISTINCT upur.id) >= 10  -- At least 10 user reports
-    AND AVG(CASE upur.effectiveness_rating
-        WHEN 'HIGHLY_EFFECTIVE' THEN 5
-        WHEN 'MODERATELY_EFFECTIVE' THEN 4
-        WHEN 'SLIGHTLY_EFFECTIVE' THEN 3
-        ELSE 2
-    END) >= 3.5  -- Average effectiveness >= 3.5
-    AND (
-        COUNT(DISTINCT pc.id) FILTER (WHERE pc.evidence_level = 'LEVEL_1_PEER_REVIEWED') < 3
-        OR COUNT(DISTINCT pa.id) FILTER (WHERE pa.evidence_level = 'LEVEL_1_PEER_REVIEWED') < 3
-    )
-ORDER BY avg_effectiveness_score DESC, usage_report_count DESC;
+  AND p.usage_report_count >= 10
+  AND p.user_trust_score >= 0.7
+GROUP BY p.id, p.scientific_name, p.verification_status, p.scientific_evidence_score, p.user_trust_score, p.usage_report_count
+ORDER BY p.user_trust_score DESC, p.usage_report_count DESC;
 
 CREATE UNIQUE INDEX ON mv_high_effectiveness_low_evidence (id);
 
-COMMENT ON MATERIALIZED VIEW mv_high_effectiveness_low_evidence IS 'Research priority: plants with high user-reported effectiveness but lacking peer-reviewed evidence';
+COMMENT ON MATERIALIZED VIEW mv_high_effectiveness_low_evidence IS 'Research priority: plants with high user trust score but lacking peer-reviewed evidence';
 
--- Regional usage trends
+-- Regional distribution (uses plant data only)
 CREATE MATERIALIZED VIEW mv_regional_usage_trends AS
 SELECT 
-    p.id AS plant_id,
-    p.scientific_name,
-    upur.user_location->>'state' AS state,
-    COUNT(DISTINCT upur.id) AS usage_count,
-    COUNT(DISTINCT upur.user_id) AS unique_users,
-    ROUND(AVG(
-        CASE upur.effectiveness_rating
-            WHEN 'HIGHLY_EFFECTIVE' THEN 5
-            WHEN 'MODERATELY_EFFECTIVE' THEN 4
-            WHEN 'SLIGHTLY_EFFECTIVE' THEN 3
-            ELSE 2
-        END
-    ), 2) AS avg_effectiveness_score,
-    jsonb_agg(DISTINCT upur.condition_treated) FILTER (WHERE upur.condition_treated IS NOT NULL) AS common_conditions
+    state_name,
+    COUNT(DISTINCT p.id) AS plant_count,
+    COUNT(DISTINCT p.id) FILTER (WHERE p.is_published = TRUE) AS published_plant_count
 FROM plants p
-INNER JOIN user_plant_usage_reports upur ON p.id = upur.plant_id
+CROSS JOIN LATERAL jsonb_array_elements_text(p.mexican_states) AS state_name
 WHERE p.deleted_at IS NULL
-    AND upur.user_location->>'state' IS NOT NULL
-GROUP BY p.id, p.scientific_name, upur.user_location->>'state'
-HAVING COUNT(DISTINCT upur.id) >= 3  -- At least 3 reports per region
-ORDER BY state, usage_count DESC;
+GROUP BY state_name
+ORDER BY plant_count DESC;
 
-CREATE INDEX ON mv_regional_usage_trends (state);
-CREATE INDEX ON mv_regional_usage_trends (plant_id);
-
--- Sponsor performance
-CREATE MATERIALIZED VIEW mv_sponsor_performance AS
-SELECT 
-    s.id AS sponsor_id,
-    s.company_name,
-    COUNT(DISTINCT sp.plant_id) AS sponsored_plant_count,
-    COUNT(DISTINCT sc.compound_id) AS sponsored_compound_count,
-    SUM(sp.impression_count) AS total_impressions,
-    SUM(sp.click_count) AS total_clicks,
-    SUM(sp.conversion_count) AS total_conversions,
-    ROUND(
-        CASE WHEN SUM(sp.impression_count) > 0 
-        THEN (SUM(sp.click_count)::numeric / SUM(sp.impression_count)) * 100 
-        ELSE 0 END, 
-        2
-    ) AS click_through_rate,
-    ROUND(
-        CASE WHEN SUM(sp.click_count) > 0 
-        THEN (SUM(sp.conversion_count)::numeric / SUM(sp.click_count)) * 100 
-        ELSE 0 END, 
-        2
-    ) AS conversion_rate,
-    SUM(sp.spent_to_date) AS total_spent,
-    ROUND(
-        CASE WHEN SUM(sp.conversion_count) > 0 
-        THEN SUM(sp.spent_to_date) / SUM(sp.conversion_count) 
-        ELSE 0 END, 
-        2
-    ) AS cost_per_conversion
-FROM sponsors s
-LEFT JOIN sponsored_plants sp ON s.id = sp.sponsor_id AND sp.is_active = TRUE
-LEFT JOIN sponsored_compounds sc ON s.id = sc.sponsor_id AND sc.is_active = TRUE
-WHERE s.deleted_at IS NULL AND s.is_active = TRUE
-GROUP BY s.id, s.company_name
-ORDER BY total_conversions DESC;
-
-CREATE UNIQUE INDEX ON mv_sponsor_performance (sponsor_id);
+CREATE INDEX ON mv_regional_usage_trends (state_name);
 
 -- ============================================================================
 -- FUNCTIONS AND PROCEDURES

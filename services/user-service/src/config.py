@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     model_config = {
         "env_file": ".env",
-        "env_prefix": "USER_SERVICE_",
+        "env_prefix": "",
         "case_sensitive": True,
     }
 

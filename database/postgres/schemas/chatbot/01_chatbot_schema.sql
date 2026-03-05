@@ -74,8 +74,8 @@ CREATE TYPE sentiment_score AS ENUM (
 
 CREATE TABLE conversations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL, -- NULL for anonymous
-    session_id UUID REFERENCES user_sessions(id) ON DELETE SET NULL,
+    user_id UUID, -- NULL for anonymous
+    session_id UUID,
     
     -- Conversation metadata
     conversation_title VARCHAR(500), -- Auto-generated from first message
@@ -98,12 +98,12 @@ CREATE TABLE conversations (
     bot_confidence_avg NUMERIC(3,2), -- Average confidence across messages
     
     -- Escalation
-    escalated_to_researcher_id UUID REFERENCES users(id),
+    escalated_to_researcher_id UUID,
     escalation_reason TEXT,
     escalated_at TIMESTAMP WITH TIME ZONE,
     resolution_notes TEXT,
     resolved_at TIMESTAMP WITH TIME ZONE,
-    resolved_by UUID REFERENCES users(id),
+    resolved_by UUID,
     
     -- Analytics
     message_count INTEGER DEFAULT 0,
@@ -124,7 +124,7 @@ CREATE TABLE conversations (
     -- Timestamps
     started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     last_message_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    ended_at TIMESTAMP WITH TIME ZE,
+    ended_at TIMESTAMP WITH TIME ZONE,
     
     -- Archival
     archived_at TIMESTAMP WITH TIME ZONE,
@@ -191,14 +191,14 @@ CREATE TABLE messages (
     
     -- Sender
     is_from_user BOOLEAN NOT NULL,
-    user_id UUID REFERENCES users(id), -- Who sent it (if user message)
+    user_id UUID, -- Who sent it (if user message)
     bot_version VARCHAR(50), -- Which bot version generated this (if bot message)
     model_used VARCHAR(100), -- 'gpt-4', 'claude-3', 'custom-rag', etc.
     
     -- Bot response quality
     confidence_score NUMERIC(3,2), -- Bot's confidence in its response
     needs_verification BOOLEAN DEFAULT FALSE, -- Flagged for researcher review
-    verified_by UUID REFERENCES users(id),
+    verified_by UUID,
     verification_notes TEXT,
     
     -- User feedback on bot message
@@ -266,7 +266,7 @@ CREATE TABLE chatbot_knowledge_documents (
     language VARCHAR(10) DEFAULT 'es',
     
     -- Vector embedding (for semantic search)
-    embedding vector(1536), -- Adjust dimension based on your embedding model
+    embedding JSONB, -- was vector(1536), requires pgvector extension
     
     -- Metadata
     tags JSONB DEFAULT '[]',
@@ -279,7 +279,7 @@ CREATE TABLE chatbot_knowledge_documents (
     quality_score NUMERIC(3,2),
     
     -- Verification
-    verified_by UUID REFERENCES users(id),
+    verified_by UUID,
     verified_at TIMESTAMP WITH TIME ZONE,
     
     -- Status
@@ -287,9 +287,9 @@ CREATE TABLE chatbot_knowledge_documents (
     
     -- Timestamps
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES users(id),
+    created_by UUID,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_by UUID REFERENCES users(id),
+    updated_by UUID,
     deleted_at TIMESTAMP WITH TIME ZONE,
     
     -- Full-text search
@@ -341,7 +341,7 @@ CREATE TABLE chatbot_quick_replies (
     is_active BOOLEAN DEFAULT TRUE,
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES users(id)
+    created_by UUID
 );
 
 CREATE INDEX idx_quick_replies_intent ON chatbot_quick_replies(trigger_intent) WHERE is_active = TRUE;
@@ -382,7 +382,7 @@ CREATE TABLE chatbot_feedback (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     message_id UUID REFERENCES messages(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    user_id UUID,
     
     -- Feedback type
     feedback_type VARCHAR(50), -- 'thumbs_up', 'thumbs_down', 'report_issue', 'suggest_improvement'
@@ -399,7 +399,7 @@ CREATE TABLE chatbot_feedback (
     conversation_context JSONB, -- Snapshot of conversation state
     
     -- Follow-up
-    reviewed_by UUID REFERENCES users(id),
+    reviewed_by UUID,
     review_notes TEXT,
     action_taken VARCHAR(255), -- 'updated_knowledge_base', 'retrained_model', 'no_action'
     reviewed_at TIMESTAMP WITH TIME ZONE,
@@ -430,7 +430,7 @@ CREATE TABLE intent_classification_log (
     
     -- Verification
     actual_intent message_intent, -- Manually verified
-    verified_by UUID REFERENCES users(id),
+    verified_by UUID,
     verified_at TIMESTAMP WITH TIME ZONE,
     
     -- Model info
@@ -517,11 +517,8 @@ SELECT
     COUNT(*) FILTER (WHERE recommendation_clicked = TRUE) AS recommendation_clicks,
     COUNT(*) FILTER (WHERE recommendation_favorited = TRUE) AS recommendation_saves,
     
-    -- Intent distribution
-    jsonb_object_agg(
-        initial_intent,
-        COUNT(*) FILTER (WHERE initial_intent IS NOT NULL)
-    ) AS intent_distribution
+    -- Intent distribution (computed separately to avoid nested aggregate)
+    NULL::JSONB AS intent_distribution
 FROM conversations
 WHERE started_at >= CURRENT_DATE - INTERVAL '90 days'
 GROUP BY DATE_TRUNC('day', started_at)
@@ -584,14 +581,14 @@ CREATE UNIQUE INDEX ON mv_common_intents (detected_intent);
 
 -- Update conversation search vector
 CREATE OR REPLACE FUNCTION update_conversation_search_vector()
-RETURNS TRIGGER AS $
+RETURNS TRIGGER AS $$
 BEGIN
     NEW.search_vector := 
         setweight(to_tsvector('spanish', COALESCE(NEW.conversation_title, '')), 'A') ||
         setweight(to_tsvector('spanish', COALESCE(NEW.primary_topic, '')), 'B');
     RETURN NEW;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 CREATE TRIGGER tg_update_conversation_search_vector
 BEFORE INSERT OR UPDATE ON conversations
@@ -600,14 +597,14 @@ EXECUTE FUNCTION update_conversation_search_vector();
 
 -- Update knowledge document search vector
 CREATE OR REPLACE FUNCTION update_knowledge_search_vector()
-RETURNS TRIGGER AS $
+RETURNS TRIGGER AS $$
 BEGIN
     NEW.search_vector := 
         setweight(to_tsvector('spanish', COALESCE(NEW.document_title, '')), 'A') ||
         setweight(to_tsvector('spanish', COALESCE(NEW.content, '')), 'B');
     RETURN NEW;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 CREATE TRIGGER tg_update_knowledge_search_vector
 BEFORE INSERT OR UPDATE ON chatbot_knowledge_documents
@@ -616,7 +613,7 @@ EXECUTE FUNCTION update_knowledge_search_vector();
 
 -- Auto-update conversation metrics when messages are added
 CREATE OR REPLACE FUNCTION update_conversation_metrics()
-RETURNS TRIGGER AS $
+RETURNS TRIGGER AS $$
 BEGIN
     UPDATE conversations
     SET 
@@ -631,7 +628,7 @@ BEGIN
     
     RETURN NEW;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 CREATE TRIGGER tg_update_conversation_metrics
 AFTER INSERT ON messages
@@ -640,7 +637,7 @@ EXECUTE FUNCTION update_conversation_metrics();
 
 -- Auto-generate conversation title from first message
 CREATE OR REPLACE FUNCTION generate_conversation_title()
-RETURNS TRIGGER AS $
+RETURNS TRIGGER AS $$
 DECLARE
     v_title TEXT;
 BEGIN
@@ -660,7 +657,7 @@ BEGIN
     
     RETURN NEW;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 CREATE TRIGGER tg_generate_conversation_title
 AFTER INSERT ON messages
@@ -686,7 +683,7 @@ RETURNS TABLE (
     extracted_entities JSONB,
     rich_content JSONB,
     sent_at TIMESTAMP WITH TIME ZONE
-) AS $
+) AS $$
 BEGIN
     RETURN QUERY
     SELECT 
@@ -705,7 +702,7 @@ BEGIN
     ORDER BY m.message_sequence DESC
     LIMIT p_limit;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- Search knowledge base semantically (placeholder - requires vector extension)
 CREATE OR REPLACE FUNCTION search_knowledge_base(
@@ -718,7 +715,7 @@ RETURNS TABLE (
     document_title VARCHAR,
     content TEXT,
     similarity_score NUMERIC
-) AS $
+) AS $$
 BEGIN
     -- This is a simplified full-text search
     -- In production, replace with vector similarity search using pgvector
@@ -737,11 +734,11 @@ BEGIN
     ORDER BY similarity_score DESC
     LIMIT p_limit;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- Calculate chatbot response quality score
 CREATE OR REPLACE FUNCTION calculate_message_quality_score(p_message_id UUID)
-RETURNS NUMERIC AS $
+RETURNS NUMERIC AS $$
 DECLARE
     v_score NUMERIC := 0;
     v_message RECORD;
@@ -772,11 +769,11 @@ BEGIN
     
     RETURN LEAST(v_score, 1.0);
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- Archive old conversations
 CREATE OR REPLACE FUNCTION archive_old_conversations(p_days_old INTEGER DEFAULT 90)
-RETURNS INTEGER AS $
+RETURNS INTEGER AS $$
 DECLARE
     v_archived_count INTEGER;
 BEGIN
@@ -792,17 +789,17 @@ BEGIN
     GET DIAGNOSTICS v_archived_count = ROW_COUNT;
     RETURN v_archived_count;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- Refresh chatbot analytics
 CREATE OR REPLACE FUNCTION refresh_chatbot_analytics()
-RETURNS void AS $
+RETURNS void AS $$
 BEGIN
     REFRESH MATERIALIZED VIEW CONCURRENTLY mv_chatbot_performance;
     REFRESH MATERIALIZED VIEW CONCURRENTLY mv_top_knowledge_documents;
     REFRESH MATERIALIZED VIEW CONCURRENTLY mv_common_intents;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- ============================================================================
 -- INTEGRATION WITH EXISTING TABLES
@@ -810,7 +807,7 @@ $ LANGUAGE plpgsql;
 
 -- Link messages to plant views
 CREATE OR REPLACE FUNCTION log_plant_view_from_chat()
-RETURNS TRIGGER AS $
+RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.interaction_type = 'VIEWED_PLANT' AND NEW.interaction_metadata->>'plant_id' IS NOT NULL THEN
         INSERT INTO user_plant_views (
@@ -829,7 +826,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 CREATE TRIGGER tg_log_plant_view_from_chat
 AFTER UPDATE ON messages
@@ -841,44 +838,44 @@ EXECUTE FUNCTION log_plant_view_from_chat();
 -- CHATBOT PERMISSIONS
 -- ============================================================================
 
--- Add chatbot-specific permissions
-INSERT INTO permissions (resource_type, action, name, display_name, description) VALUES
-('CONVERSATION', 'READ', 'conversation.read', 'Ver conversaciones', 'Puede ver conversaciones de chatbot'),
-('CONVERSATION', 'CREATE', 'conversation.create', 'Iniciar conversaciones', 'Puede iniciar nuevas conversaciones'),
-('CONVERSATION', 'UPDATE', 'conversation.update', 'Editar conversaciones', 'Puede editar conversaciones'),
-('CONVERSATION', 'DELETE', 'conversation.delete', 'Eliminar conversaciones', 'Puede eliminar conversaciones'),
-('CONVERSATION', 'MODERATE', 'conversation.moderate', 'Moderar conversaciones', 'Puede revisar y moderar conversaciones')
-ON CONFLICT (resource_type, action) DO NOTHING;
+-- Add chatbot-specific permissions (skipped - permissions table is in auth DB)
+-- INSERT INTO permissions (resource_type, action, name, display_name, description) VALUES
+-- ('CONVERSATION', 'READ', 'conversation.read', 'Ver conversaciones', 'Puede ver conversaciones de chatbot'),
+-- ('CONVERSATION', 'CREATE', 'conversation.create', 'Iniciar conversaciones', 'Puede iniciar nuevas conversaciones'),
+-- ('CONVERSATION', 'UPDATE', 'conversation.update', 'Editar conversaciones', 'Puede editar conversaciones'),
+-- ('CONVERSATION', 'DELETE', 'conversation.delete', 'Eliminar conversaciones', 'Puede eliminar conversaciones'),
+-- ('CONVERSATION', 'MODERATE', 'conversation.moderate', 'Moderar conversaciones', 'Puede revisar y moderar conversaciones')
+-- -- ON CONFLICT (resource_type, action) DO NOTHING;
 
 -- Grant chatbot permissions to roles
-DO $
-DECLARE
-    v_client_role_id UUID;
-    v_researcher_role_id UUID;
-    v_moderator_role_id UUID;
-BEGIN
-    SELECT id INTO v_client_role_id FROM roles WHERE name = 'CLIENT';
-    SELECT id INTO v_researcher_role_id FROM roles WHERE name = 'RESEARCHER';
-    SELECT id INTO v_moderator_role_id FROM roles WHERE name = 'MODERATOR';
-    
-    -- Clients can read and create their own conversations
-    INSERT INTO role_permissions (role_id, permission_id, is_granted, additional_conditions)
-    SELECT v_client_role_id, id, TRUE, '{"own_resource_only": true}'::jsonb
-    FROM permissions WHERE name IN ('conversation.read', 'conversation.create')
-    ON CONFLICT DO NOTHING;
-    
-    -- Researchers can moderate conversations
-    INSERT INTO role_permissions (role_id, permission_id, is_granted)
-    SELECT v_researcher_role_id, id, TRUE
-    FROM permissions WHERE name IN ('conversation.read', 'conversation.moderate')
-    ON CONFLICT DO NOTHING;
-    
-    -- Moderators get full conversation access
-    INSERT INTO role_permissions (role_id, permission_id, is_granted)
-    SELECT v_moderator_role_id, id, TRUE
-    FROM permissions WHERE name LIKE 'conversation.%'
-    ON CONFLICT DO NOTHING;
-END $;
+-- DO $$
+-- DECLARE
+--     v_client_role_id UUID;
+--     v_researcher_role_id UUID;
+--     v_moderator_role_id UUID;
+-- BEGIN
+--     SELECT id INTO v_client_role_id FROM roles WHERE name = 'CLIENT';
+--     SELECT id INTO v_researcher_role_id FROM roles WHERE name = 'RESEARCHER';
+--     SELECT id INTO v_moderator_role_id FROM roles WHERE name = 'MODERATOR';
+--     
+--     -- Clients can read and create their own conversations
+--     INSERT INTO role_permissions (role_id, permission_id, is_granted, additional_conditions)
+--     SELECT v_client_role_id, id, TRUE, '{"own_resource_only": true}'::jsonb
+--     FROM permissions WHERE name IN ('conversation.read', 'conversation.create')
+--     ON CONFLICT DO NOTHING;
+--     
+--     -- Researchers can moderate conversations
+--     INSERT INTO role_permissions (role_id, permission_id, is_granted)
+--     SELECT v_researcher_role_id, id, TRUE
+--     FROM permissions WHERE name IN ('conversation.read', 'conversation.moderate')
+--     ON CONFLICT DO NOTHING;
+--     
+--     -- Moderators get full conversation access
+--     INSERT INTO role_permissions (role_id, permission_id, is_granted)
+--     SELECT v_moderator_role_id, id, TRUE
+--     FROM permissions WHERE name LIKE 'conversation.%'
+--     ON CONFLICT DO NOTHING;
+-- END $$;
 
 -- ============================================================================
 -- SAMPLE CHATBOT KNOWLEDGE BASE (for testing)
@@ -914,126 +911,29 @@ INSERT INTO chatbot_knowledge_documents (document_title, document_type, content,
 -- SUCCESS MESSAGE
 -- ============================================================================
 
-DO $
-BEGIN
-    RAISE NOTICE '================================================================';
-    RAISE NOTICE 'CHATBOT MODULE ADDED SUCCESSFULLY';
-    RAISE NOTICE '================================================================';
-    RAISE NOTICE 'New Tables: 11';
-    RAISE NOTICE 'New Materialized Views: 3';
-    RAISE NOTICE 'New Functions: 7';
-    RAISE NOTICE 'New Triggers: 4';
-    RAISE NOTICE '================================================================';
-    RAISE NOTICE 'Features:';
-    RAISE NOTICE '- Multi-turn conversation tracking';
-    RAISE NOTICE '- NLP intent detection & entity extraction';
-    RAISE NOTICE '- RAG knowledge base with semantic search';
-    RAISE NOTICE '- User feedback & quality scoring';
-    RAISE NOTICE '- Conversation analytics & patterns';
-    RAISE NOTICE '- Integration with plant views & favorites';
-    RAISE NOTICE '- Escalation to researchers';
-    RAISE NOTICE '- Quick replies & context management';
-    RAISE NOTICE '================================================================';
-    RAISE NOTICE 'Recommended Extensions:';
-    RAISE NOTICE '- pgvector: For semantic search (vector embeddings)';
-    RAISE NOTICE '- pg_partman: For message table partitioning at scale';
-    RAISE NOTICE '================================================================';
-END $;
+-- DO $$
+-- BEGIN
+--     RAISE NOTICE '================================================================';
+--     RAISE NOTICE 'CHATBOT MODULE ADDED SUCCESSFULLY';
+--     RAISE NOTICE '================================================================';
+--     RAISE NOTICE 'New Tables: 11';
+--     RAISE NOTICE 'New Materialized Views: 3';
+--     RAISE NOTICE 'New Functions: 7';
+--     RAISE NOTICE 'New Triggers: 4';
+--     RAISE NOTICE '================================================================';
+--     RAISE NOTICE 'Features:';
+--     RAISE NOTICE '- Multi-turn conversation tracking';
+--     RAISE NOTICE '- NLP intent detection & entity extraction';
+--     RAISE NOTICE '- RAG knowledge base with semantic search';
+--     RAISE NOTICE '- User feedback & quality scoring';
+--     RAISE NOTICE '- Conversation analytics & patterns';
+--     RAISE NOTICE '- Integration with plant views & favorites';
+--     RAISE NOTICE '- Escalation to researchers';
+--     RAISE NOTICE '- Quick replies & context management';
+--     RAISE NOTICE '================================================================';
+--     RAISE NOTICE 'Recommended Extensions:';
+--     RAISE NOTICE '- pgvector: For semantic search (vector embeddings)';
+--     RAISE NOTICE '- pg_partman: For message table partitioning at scale';
+--     RAISE NOTICE '================================================================';
+-- END $$;
 
-Additional Recommendations
-1. For High-Scale Chat (>100K messages/day):
-sql-- Partition messages table by month
-ALTER TABLE messages PARTITION BY RANGE (sent_at);
-
-CREATE TABLE messages_2025_01 PARTITION OF messages
-FOR VALUES FROM ('2025-01-01') TO ('2025-02-01');
-
--- Automate with pg_partman extension
-2. Enable Vector Search (pgvector):
-bash# Install pgvector extension
-CREATE EXTENSION vector;
-
-# Then you can use:
-CREATE INDEX idx_knowledge_embedding ON chatbot_knowledge_documents 
-USING ivfflat (embedding vector_cosine_ops) 
-WITH (lists = 100);
-3. Redis Integration Strategy:
-yamlRedis Use Cases:
-  - Active conversation state (key: `conv:{conversation_id}`)
-  - Message rate limiting (key: `rate:user:{user_id}`)
-  - Cached RAG results (key: `rag:{query_hash}`)
-  - Real-time typing indicators
-  - Session management
-
-PostgreSQL Use Cases:
-  - Persistent conversation history
-  - Analytics & reporting
-  - User management
-  - Long-term knowledge base
-
-Architecture Decision Summary
-✅ Use PostgreSQL for:
-
-Conversation history (permanent record)
-Analytics & insights
-Knowledge base
-User profiles & permissions
-
-✅ Use Redis for:
-
-Active session state
-Real-time presence
-Rate limiting
-Temporary caching
-
-This hybrid approach gives you the best of both worlds! Would you like me to:
-
-Create the Redis data structure schema?
-Add WebSocket/real-time message tables?
-Create example GraphQL resolvers for chat?
-Add voice message transcription tables?
-Create ML training data export queries?
-Create the Redis data structure schema?Feb 15Redis Data Structure Schema for Chatbot System
-Here's a comprehensive Redis schema optimized for real-time chatbot operations, session management, and caching.
-yaml# ============================================================================
-# REDIS DATA STRUCTURE SCHEMA
-# Sistema Inteligente de Análisis de Plantas Medicinales
-# ============================================================================
-# Redis Version: 7.0+
-# Features Used: Strings, Hashes, Lists, Sets, Sorted Sets, Streams, JSON
-# ============================================================================
-
-# ============================================================================
-# KEY NAMING CONVENTIONS
-# ============================================================================
-# Pattern: {domain}:{entity}:{identifier}:{attribute}
-# TTL Convention: Short-lived (5m-1h), Medium (1h-24h), Long (24h-7d)
-# ============================================================================
-
-# ============================================================================
-# 1. SESSION MANAGEMENT
-# ============================================================================
-
-# Active user session
-sessions:user:{user_id}
-  Type: Hash
-  TTL: 24 hours (sliding window - refresh on activity)
-  Fields:
-    - session_id: UUID
-    - user_id: UUID
-    - email: string
-    - username: string
-    - roles: JSON array ["CLIENT", "RESEARCHER"]
-    - permissions: JSON array
-    - created_at: Unix timestamp
-    - last_activity: Unix timestamp
-    - device_type: string
-    - ip_address: string
-    - location: JSON {state, city, lat, lng}
-    - language: string (default: "es")
-    - timezone: string
-  
-  Example:
-    HSET sessions:user:550e8400-e29b-41d4-a716-446655440000 
-      session_id "abc123-def456"
-      user_id "550e8400-e29b-41d4-a716-446655440

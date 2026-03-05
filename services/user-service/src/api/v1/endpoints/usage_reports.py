@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as aioredis
 
-from src.main import get_db, get_redis
+from src.dependencies import get_db, get_redis
 from src.schemas.usage_report import (
     UsageReportCreate,
     UsageReportResponse,

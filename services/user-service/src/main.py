@@ -1,5 +1,4 @@
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 import structlog
 from fastapi import FastAPI
@@ -8,6 +7,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 import redis.asyncio as aioredis
 
 from src.config import get_settings
+from src.dependencies import set_session_factory, set_redis_client
 from src.api.v1.endpoints import profile, favorites, usage_reports, history
 
 logger = structlog.get_logger(__name__)
@@ -25,31 +25,19 @@ async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit
 redis_client: aioredis.Redis | None = None
 
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with async_session() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-
-
-async def get_redis() -> aioredis.Redis:
-    assert redis_client is not None, "Redis client not initialized"
-    return redis_client
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global redis_client
     logger.info("Starting User Service", port=settings.PORT)
+
+    set_session_factory(async_session)
 
     redis_client = aioredis.from_url(
         settings.redis_url,
         decode_responses=True,
     )
     await redis_client.ping()
+    set_redis_client(redis_client)
     logger.info("Redis connection established")
 
     yield

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 import redis.asyncio as aioredis
 
-from src.main import get_redis
+from src.dependencies import get_redis
 
 router = APIRouter()
 
