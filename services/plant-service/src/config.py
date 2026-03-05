@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     PUBMED_API_KEY: str | None = None
     PUBCHEM_BASE_URL: str = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
 
+    # PMC / NCBI APIs
+    PMC_IDCONV_BASE_URL: str = "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/"
+    PMC_OA_BASE_URL: str = "https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi"
+    PMC_CITATION_BASE_URL: str = "https://api.ncbi.nlm.nih.gov/lit/ctxp/v1/pubmed/"
+    PMC_BIOC_BASE_URL: str = "https://www.ncbi.nlm.nih.gov/research/bionlp/RESTful/pmcoa.cgi"
+    NCBI_TOOL_NAME: str = "QuimicaDeAltura"
+    NCBI_TOOL_EMAIL: str = ""
+
     # Service
     SERVICE_HOST: str = "0.0.0.0"
     SERVICE_PORT: int = 8002

@@ -56,6 +56,40 @@ PUBCHEM_REQUESTS = Counter(
     ["endpoint", "status"],
 )
 
+PMC_IDCONV_REQUESTS = Counter(
+    "plant_service_pmc_idconv_requests_total",
+    "Total PMC ID Converter API requests",
+    ["status"],
+)
+
+PMC_OA_REQUESTS = Counter(
+    "plant_service_pmc_oa_requests_total",
+    "Total PMC Open Access API requests",
+    ["status"],
+)
+
+PMC_CITATION_REQUESTS = Counter(
+    "plant_service_pmc_citation_requests_total",
+    "Total PMC Citation Exporter API requests",
+    ["format", "status"],
+)
+
+PMC_BIOC_REQUESTS = Counter(
+    "plant_service_pmc_bioc_requests_total",
+    "Total PMC BioC full-text API requests",
+    ["status"],
+)
+
+ARTICLES_IMPORTED = Counter(
+    "plant_service_articles_imported_total",
+    "Total articles imported from PubMed",
+)
+
+ARTICLES_ENRICHED = Counter(
+    "plant_service_articles_enriched_total",
+    "Total articles enriched via PMC APIs",
+)
+
 EXTERNAL_API_LATENCY = Histogram(
     "plant_service_external_api_latency_seconds",
     "External API call latency in seconds",
