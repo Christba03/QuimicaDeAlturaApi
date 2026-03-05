@@ -50,7 +50,7 @@ async def cleanup_sessions_task(ctx) -> int:
     ARQ cron: delete expired user sessions.
     Runs once per hour to keep the user_sessions table tidy.
     """
-    from src.main import async_session_factory
+    from src.dependencies import _async_session_factory as async_session_factory
 
     async with async_session_factory() as session:
         try:

@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.main import get_db
+from src.dependencies import get_db
 from src.models.role import Permission, Role
 
 logger = structlog.get_logger()

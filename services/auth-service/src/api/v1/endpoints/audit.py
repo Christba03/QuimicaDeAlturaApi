@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.dependencies import get_current_user, require_superuser
-from src.main import get_db
+from src.dependencies import get_db
 from src.models.security_event import SecurityEvent, SecurityEventType
 
 logger = structlog.get_logger()

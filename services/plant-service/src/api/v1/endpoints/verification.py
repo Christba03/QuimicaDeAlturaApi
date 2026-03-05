@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.main import get_db, get_redis
+from src.dependencies import get_db, get_redis
 from src.core.events import EventPublisher
 from src.models.plant import PlantStatus
 from src.schemas.plant import PlantResponse

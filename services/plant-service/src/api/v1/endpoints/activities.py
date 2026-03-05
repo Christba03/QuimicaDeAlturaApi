@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.main import get_db
+from src.dependencies import get_db
 from src.models.activity import EvidenceLevel, MedicinalActivity
 
 router = APIRouter()

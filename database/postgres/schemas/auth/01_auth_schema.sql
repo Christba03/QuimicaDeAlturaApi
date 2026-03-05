@@ -165,7 +165,7 @@ CREATE TABLE users (
     
     -- Authentication
     email CITEXT NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
+    hashed_password VARCHAR(255) NOT NULL,
     email_verified BOOLEAN DEFAULT FALSE,
     email_verification_token VARCHAR(255),
     email_verified_at TIMESTAMP WITH TIME ZONE,
@@ -190,6 +190,8 @@ CREATE TABLE users (
     notification_preferences JSONB DEFAULT '{"email": true, "push": false}',
     
     -- Status
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    is_superuser BOOLEAN NOT NULL DEFAULT FALSE,
     is_banned BOOLEAN DEFAULT FALSE,
     ban_reason TEXT,
     banned_at TIMESTAMP WITH TIME ZONE,
@@ -199,10 +201,11 @@ CREATE TABLE users (
     two_factor_enabled BOOLEAN DEFAULT FALSE,
     two_factor_secret VARCHAR(255),
     last_login_at TIMESTAMP WITH TIME ZONE,
-    last_login_ip INET,
+    last_login_ip VARCHAR(45),
     failed_login_attempts INTEGER DEFAULT 0,
     locked_until TIMESTAMP WITH TIME ZONE,
-    
+    password_history JSONB NOT NULL DEFAULT '[]',
+
     -- Metadata
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,

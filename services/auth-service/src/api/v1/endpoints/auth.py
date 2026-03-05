@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
-from src.main import get_db
+from src.dependencies import get_db
 from src.schemas.auth import (
     LoginRequest,
     LogoutRequest,

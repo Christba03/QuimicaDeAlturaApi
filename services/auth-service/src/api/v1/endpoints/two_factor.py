@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.main import get_db
+from src.dependencies import get_db
 from src.models.security_event import SecurityEventType
 from src.repositories.user_repository import UserRepository
 from src.services.auth_service import AuthService

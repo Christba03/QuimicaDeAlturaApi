@@ -285,25 +285,27 @@ services:
   # Frontend Applications
   # ==========================================
 
-  plant-id-app:
+  webpage:
     build:
       context: ../Quimica-de-Altura
       dockerfile: Dockerfile
-    container_name: mp-plant-id-app
+    image: quimicadealtura_api-webpage:prod
+    container_name: mp-webpage
     ports:
-      - "${PLANT_ID_APP_PORT:-3000}:80"
+      - "${WEBPAGE_PORT:-3000}:80"
     environment:
       - API_BASE_URL=${API_BASE_URL:-http://localhost:8000}
     networks:
       - mp-network
 
-  landing-page:
+  landingpage:
     build:
       context: ../QuimicaDeAltura_LandingPage
       dockerfile: Dockerfile
-    container_name: mp-landing-page
+    image: quimicadealtura_api-landingpage:prod
+    container_name: mp-landingpage
     ports:
-      - "${LANDING_PAGE_PORT:-3001}:80"
+      - "${LANDINGPAGE_PORT:-3001}:80"
     environment:
       - API_BASE_URL=${API_BASE_URL:-http://localhost:8000}
     networks:

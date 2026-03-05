@@ -22,8 +22,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
     """Validates JWT tokens by calling the auth service and injects user info into request headers."""
 
     async def dispatch(self, request: Request, call_next):
-        # Skip authentication for public paths
-        if request.url.path in PUBLIC_PATHS or request.url.path.startswith("/health"):
+        # Skip authentication for public paths and all auth-service routes
+        # (auth-service manages its own authentication internally)
+        if (
+            request.url.path in PUBLIC_PATHS
+            or request.url.path.startswith("/health")
+            or request.url.path.startswith("/api/auth/")
+        ):
             return await call_next(request)
 
         # Allow preflight CORS requests through

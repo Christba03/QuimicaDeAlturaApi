@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.dependencies import require_superuser
-from src.main import get_db
+from src.dependencies import get_db
 from src.models.user import User
 from src.models.role import Role
 from src.repositories.user_repository import UserRepository

@@ -39,12 +39,12 @@ class UserResponse(BaseModel):
     last_name: str | None = None
     is_active: bool
     is_superuser: bool
-    is_verified: bool
+    is_verified: bool = Field(default=False, validation_alias="email_verified")
     created_at: datetime
     updated_at: datetime
     roles: list[RoleResponse] = Field(default_factory=list)
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 class UserListResponse(BaseModel):

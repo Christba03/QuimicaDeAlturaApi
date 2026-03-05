@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.main import get_db
+from src.dependencies import get_db
 from src.schemas.auth import TokenResponse
 from src.services.auth_service import AuthService
 from src.services.oauth_service import OAuthService, PROVIDERS

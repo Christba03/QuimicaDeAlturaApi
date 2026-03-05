@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.main import get_db
+from src.dependencies import get_db
 from src.models.security_event import SecurityEventType
 from src.models.verification_code import VerificationCodeType
 from src.repositories.user_repository import UserRepository

@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.dependencies import require_superuser
-from src.main import get_db
+from src.dependencies import get_db
 from src.services.policy_service import PolicyService
 
 logger = structlog.get_logger()

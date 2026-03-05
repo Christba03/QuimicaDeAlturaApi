@@ -8,6 +8,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.config import get_settings
+from src.dependencies import set_session_factory, set_redis_client
 from src.api.v1.endpoints import plants, compounds, activities, verification
 
 logger = structlog.get_logger()
@@ -27,32 +28,19 @@ async_session_factory = async_sessionmaker(
     expire_on_commit=False,
 )
 
-redis_client: Redis | None = None
-
-
-async def get_db() -> AsyncSession:
-    async with async_session_factory() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
-
-
-async def get_redis() -> Redis | None:
-    return redis_client
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global redis_client
     logger.info("starting_plant_service", port=settings.SERVICE_PORT)
+    set_session_factory(async_session_factory)
 
     # Initialize Redis
+    redis_client = None
     try:
         redis_client = Redis.from_url(
             settings.redis_url,
             decode_responses=True,
         )
+        set_redis_client(redis_client)
         await redis_client.ping()
         logger.info("redis_connected")
     except Exception as exc:

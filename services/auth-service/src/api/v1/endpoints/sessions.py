@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.dependencies import get_current_user
-from src.main import get_db
+from src.dependencies import get_db
 from src.models.security_event import SecurityEventType
 from src.services.security_service import SecurityService
 from src.services.session_service import SessionService

@@ -60,3 +60,23 @@ services:
       cache_from:
         - quimicadealtura_api-api-gateway:latest
     image: quimicadealtura_api-api-gateway:prod
+
+  webpage:
+    build:
+      context: ../Quimica-de-Altura
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+      cache_from:
+        - quimicadealtura_api-webpage:latest
+    image: quimicadealtura_api-webpage:prod
+
+  landingpage:
+    build:
+      context: ../QuimicaDeAltura_LandingPage
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+      cache_from:
+        - quimicadealtura_api-landingpage:latest
+    image: quimicadealtura_api-landingpage:prod

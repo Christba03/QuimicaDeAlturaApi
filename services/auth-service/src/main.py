@@ -1,5 +1,4 @@
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 import structlog
 from fastapi import FastAPI, Request
@@ -10,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.config import settings
+from src.dependencies import set_session_factory
 from src.api.v1.endpoints import auth, users, roles, verification, two_factor, password, sessions
 from src.api.v1.endpoints import oauth, api_keys, policies, audit
 from src.api.v1.endpoints.health import router as health_router
@@ -20,16 +20,6 @@ logger = structlog.get_logger()
 
 engine = create_async_engine(settings.DATABASE_URL, echo=settings.DEBUG, pool_size=20, max_overflow=10)
 async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with async_session_factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
 
 
 def _setup_opentelemetry(app: FastAPI) -> None:
@@ -58,6 +48,7 @@ def _setup_opentelemetry(app: FastAPI) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("auth_service.starting", version=settings.APP_VERSION)
+    set_session_factory(async_session_factory)
     app.state.db_session_factory = async_session_factory
 
     # Redis

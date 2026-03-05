@@ -40,7 +40,7 @@ class SecurityService:
             event_type=event_type,
             ip_address=ip_address,
             user_agent=user_agent,
-            metadata=metadata or {},
+            event_metadata=metadata or {},
         )
         self.session.add(event)
         await self.session.flush()
