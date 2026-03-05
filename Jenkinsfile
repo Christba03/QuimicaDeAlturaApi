@@ -31,13 +31,28 @@ pipeline {
         
         stage('Lint & Code Quality') {
             parallel {
-                stage('Python Linting') {
+                stage('Auth Service Linting') {
                     steps {
                         script {
                             dir('services/auth-service') {
                                 sh '''
                                     pip install --upgrade pip
                                     pip install flake8 black isort mypy
+                                    flake8 src --max-line-length=120 --exclude=__pycache__,*.pyc || true
+                                    black --check src || true
+                                    isort --check-only src || true
+                                '''
+                            }
+                        }
+                    }
+                }
+                stage('Plant Service Linting') {
+                    steps {
+                        script {
+                            dir('services/plant-service') {
+                                sh '''
+                                    pip install --upgrade pip
+                                    pip install flake8 black isort
                                     flake8 src --max-line-length=120 --exclude=__pycache__,*.pyc || true
                                     black --check src || true
                                     isort --check-only src || true
@@ -67,8 +82,8 @@ pipeline {
                 script {
                     echo "Building Docker images..."
                     sh '''
-                        docker-compose build --parallel auth-service
-                        docker images | grep quimicadealtura_api-auth-service
+                        docker-compose build --parallel auth-service plant-service
+                        docker images | grep quimicadealtura_api
                     '''
                 }
             }
@@ -79,7 +94,7 @@ pipeline {
                 script {
                     echo "Starting PostgreSQL and Redis..."
                     sh '''
-                        docker-compose up -d postgres-auth redis
+                        docker-compose up -d postgres-auth postgres-core redis
                         echo "Waiting for services to be healthy..."
                         sleep 10
                         docker-compose ps
@@ -101,12 +116,38 @@ pipeline {
         }
         
         stage('Unit Tests') {
-            steps {
-                script {
-                    dir('services/auth-service') {
-                        sh '''
-                            docker-compose run --rm auth-service pytest tests/ -v --tb=short || true
-                        '''
+            parallel {
+                stage('Auth Service Unit Tests') {
+                    steps {
+                        script {
+                            sh '''
+                                docker-compose run --rm auth-service pytest tests/ -v --tb=short || true
+                            '''
+                        }
+                    }
+                }
+                stage('Plant Service Unit Tests') {
+                    steps {
+                        script {
+                            echo "Running plant-service unit tests (integration clients, service, endpoints)..."
+                            sh '''
+                                docker-compose run --rm plant-service pytest tests/ \
+                                    -v --tb=short \
+                                    --junit-xml=/tmp/plant_service_results.xml \
+                                    || true
+                            '''
+                        }
+                    }
+                    post {
+                        always {
+                            script {
+                                sh '''
+                                    docker cp $(docker-compose ps -q plant-service 2>/dev/null | head -1):/tmp/plant_service_results.xml \
+                                        plant_service_results.xml 2>/dev/null || true
+                                '''
+                                junit allowEmptyResults: true, testResults: 'plant_service_results.xml'
+                            }
+                        }
                     }
                 }
             }
@@ -135,6 +176,52 @@ pipeline {
                         cd services/auth-service
                         pip install -q pytest httpx requests
                         pytest tests/test_new_features.py::TestIntegration -v || true
+                    '''
+                }
+            }
+        }
+        
+        stage('Plant Service Integration Tests') {
+            steps {
+                script {
+                    echo "Running plant-service integration tests..."
+                    sh '''
+                        # Start plant service
+                        docker-compose up -d plant-service
+                        sleep 5
+                        
+                        # Wait for service to be ready
+                        for i in {1..30}; do
+                            if curl -f http://localhost:8002/health > /dev/null 2>&1; then
+                                echo "Plant service is ready!"
+                                break
+                            fi
+                            echo "Waiting for plant-service... ($i/30)"
+                            sleep 2
+                        done
+                        
+                        # Smoke-test the articles endpoints
+                        echo "--- Articles API smoke tests ---"
+                        
+                        # GET /articles should return paginated list
+                        STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8002/articles/)
+                        [ "$STATUS" == "200" ] && echo "GET /articles         -> 200 OK" || echo "GET /articles         -> $STATUS FAIL"
+                        
+                        # POST /articles (create)
+                        STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+                            -X POST http://localhost:8002/articles/ \
+                            -H 'Content-Type: application/json' \
+                            -d '{"title":"CI Test Article","authors":["Jenkins CI"]}')
+                        [ "$STATUS" == "201" ] && echo "POST /articles        -> 201 CREATED" || echo "POST /articles        -> $STATUS (may be expected if DB not seeded)"
+                        
+                        # POST /articles/import
+                        STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+                            -X POST http://localhost:8002/articles/import \
+                            -H 'Content-Type: application/json' \
+                            -d '{"query":"Salvia hispanica medicinal","max_results":2}')
+                        echo "POST /articles/import -> $STATUS"
+                        
+                        echo "Plant service integration tests complete."
                     '''
                 }
             }
@@ -315,19 +402,27 @@ print('✓ Device fingerprinting tests passed')
                 script {
                     echo "Creating build artifacts..."
                     sh '''
-                        # Tag Docker images
+                        # Tag Docker images — auth-service
                         docker tag quimicadealtura_api-auth-service:latest \\
                             quimicadealtura_api-auth-service:${GIT_COMMIT_SHORT}
                         docker tag quimicadealtura_api-auth-service:latest \\
                             quimicadealtura_api-auth-service:build-${BUILD_NUMBER}
                         
-                        # Save image
+                        # Tag Docker images — plant-service
+                        docker tag quimicadealtura_api-plant-service:latest \\
+                            quimicadealtura_api-plant-service:${GIT_COMMIT_SHORT} || true
+                        docker tag quimicadealtura_api-plant-service:latest \\
+                            quimicadealtura_api-plant-service:build-${BUILD_NUMBER} || true
+                        
+                        # Save images
                         docker save quimicadealtura_api-auth-service:latest | gzip > auth-service-${BUILD_NUMBER}.tar.gz
+                        docker save quimicadealtura_api-plant-service:latest | gzip > plant-service-${BUILD_NUMBER}.tar.gz || true
                         
                         # Create deployment package
                         mkdir -p artifacts
                         cp docker-compose.yml artifacts/
-                        cp services/auth-service/Dockerfile artifacts/
+                        cp services/auth-service/Dockerfile artifacts/Dockerfile.auth
+                        cp services/plant-service/Dockerfile artifacts/Dockerfile.plant
                         echo "${GIT_COMMIT_SHORT}" > artifacts/VERSION
                         echo "${BUILD_NUMBER}" >> artifacts/VERSION
                     '''
