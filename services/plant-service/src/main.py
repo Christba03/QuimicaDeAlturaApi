@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from src.config import get_settings
 from src.dependencies import set_session_factory, set_redis_client
-from src.api.v1.endpoints import plants, compounds, activities, verification
+from src.api.v1.endpoints import plants, compounds, activities, articles, verification
 
 logger = structlog.get_logger()
 settings = get_settings()
@@ -80,6 +80,7 @@ Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 app.include_router(plants.router, prefix="/plants", tags=["Plants"])
 app.include_router(compounds.router, prefix="/compounds", tags=["Compounds"])
 app.include_router(activities.router, prefix="/activities", tags=["Activities"])
+app.include_router(articles.router, prefix="/articles", tags=["Articles"])
 app.include_router(
     verification.router, prefix="/verification", tags=["Verification"]
 )
