@@ -42,13 +42,20 @@ class EmailService:
                 message.attach(MIMEText(text_content, "plain"))
             message.attach(MIMEText(html_content, "html"))
 
+            # Port 587 = STARTTLS (use_tls=False); port 465 = implicit TLS (use_tls=True).
+            # aiosmtplib: "if the server uses STARTTLS, use_tls should be False"
+            use_tls = settings.SMTP_USE_TLS and settings.SMTP_PORT == 465
+            start_tls = True if settings.SMTP_PORT == 587 else None
+
+            logger.info("email.sending", to=to_email, subject=subject, host=settings.SMTP_HOST, port=settings.SMTP_PORT)
             await aiosmtplib.send(
                 message,
                 hostname=settings.SMTP_HOST,
                 port=settings.SMTP_PORT,
                 username=settings.SMTP_USER if settings.SMTP_USER else None,
                 password=settings.SMTP_PASSWORD if settings.SMTP_PASSWORD else None,
-                use_tls=settings.SMTP_USE_TLS,
+                use_tls=use_tls,
+                start_tls=start_tls,
             )
 
             logger.info("email.sent", to=to_email, subject=subject)
