@@ -435,23 +435,42 @@ CREATE INDEX idx_user_roles_validity ON user_roles(valid_from, valid_until) WHER
 
 COMMENT ON TABLE user_roles IS 'User role assignments with temporal validity';
 
--- User sessions
+-- User sessions (includes token-family, device trust, and GeoIP columns)
 CREATE TABLE user_sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    
+
     -- Session data
     refresh_token VARCHAR(500) NOT NULL UNIQUE,
-    
-    -- Session metadata
+
+    -- Token-family reuse detection
+    token_family UUID NOT NULL DEFAULT uuid_generate_v4(),
+    family_invalidated BOOLEAN NOT NULL DEFAULT FALSE,
+
+    -- Device / network
     ip_address VARCHAR(45),
     user_agent TEXT,
     device_info JSONB,
-    
+    device_fingerprint VARCHAR(64),
+    device_name VARCHAR(100),
+    device_type VARCHAR(50),
+
+    -- GeoIP
+    country_code VARCHAR(2),
+    country_name VARCHAR(100),
+    region_name VARCHAR(100),
+    city VARCHAR(100),
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
+
+    -- Device trust
+    is_trusted BOOLEAN NOT NULL DEFAULT FALSE,
+    trusted_until TIMESTAMP WITH TIME ZONE,
+
     -- Validity
+    last_activity_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    last_activity_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
 
     -- Status
     is_active BOOLEAN DEFAULT TRUE NOT NULL
@@ -460,5 +479,167 @@ CREATE TABLE user_sessions (
 CREATE INDEX idx_sessions_user_id ON user_sessions(user_id);
 CREATE INDEX idx_sessions_refresh_token ON user_sessions(refresh_token) WHERE is_active = TRUE;
 CREATE INDEX idx_sessions_expires_at ON user_sessions(expires_at);
+CREATE INDEX idx_sessions_token_family ON user_sessions(token_family);
+CREATE INDEX idx_sessions_family_invalidated ON user_sessions(family_invalidated);
+CREATE INDEX idx_sessions_device_fingerprint ON user_sessions(device_fingerprint);
+CREATE INDEX idx_sessions_is_trusted ON user_sessions(is_trusted);
 
-COMMENT ON TABLE user_sessions IS 'User sessions with refresh tokens';
+COMMENT ON TABLE user_sessions IS 'User sessions with refresh tokens, device trust, and GeoIP';
+
+-- ============================================================================
+-- VERIFICATION & 2FA
+-- ============================================================================
+
+CREATE TYPE verificationcodetype AS ENUM (
+    'EMAIL_VERIFICATION',
+    'PASSWORD_RESET',
+    'TWO_FACTOR_EMAIL'
+);
+
+CREATE TABLE verification_codes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code_hash VARCHAR(255) NOT NULL,
+    code_type verificationcodetype NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    used_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE INDEX ix_verification_codes_user_id ON verification_codes(user_id);
+CREATE INDEX ix_verification_codes_code_type ON verification_codes(code_type);
+CREATE INDEX ix_verification_codes_expires_at ON verification_codes(expires_at);
+
+COMMENT ON TABLE verification_codes IS 'Email verification and password reset codes';
+
+CREATE TABLE two_factor_backup_codes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code_hash VARCHAR(255) NOT NULL UNIQUE,
+    used_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE INDEX ix_two_factor_backup_codes_user_id ON two_factor_backup_codes(user_id);
+
+COMMENT ON TABLE two_factor_backup_codes IS 'Backup codes for 2FA recovery';
+
+-- ============================================================================
+-- SECURITY EVENTS (audit log)
+-- ============================================================================
+
+CREATE TYPE securityeventtype AS ENUM (
+    'LOGIN_SUCCESS',
+    'LOGIN_FAILED',
+    'LOGOUT',
+    'PASSWORD_CHANGED',
+    'PASSWORD_RESET_REQUESTED',
+    'PASSWORD_RESET_COMPLETED',
+    'EMAIL_VERIFIED',
+    'TWO_FACTOR_ENABLED',
+    'TWO_FACTOR_DISABLED',
+    'TWO_FACTOR_VERIFIED',
+    'TWO_FACTOR_FAILED',
+    'ACCOUNT_LOCKED',
+    'ACCOUNT_UNLOCKED',
+    'SESSION_REVOKED',
+    'SUSPICIOUS_ACTIVITY'
+);
+
+CREATE TABLE security_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    event_type securityeventtype NOT NULL,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    metadata JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE INDEX ix_security_events_user_id ON security_events(user_id);
+CREATE INDEX ix_security_events_event_type ON security_events(event_type);
+CREATE INDEX ix_security_events_created_at ON security_events(created_at);
+
+COMMENT ON TABLE security_events IS 'Security audit log for auth events';
+
+-- ============================================================================
+-- OAUTH ACCOUNTS
+-- ============================================================================
+
+CREATE TABLE oauth_accounts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider VARCHAR(50) NOT NULL,
+    provider_user_id VARCHAR(255) NOT NULL,
+    provider_email VARCHAR(255),
+    provider_name VARCHAR(255),
+    provider_avatar_url VARCHAR(500),
+    provider_data JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT uq_oauth_provider_user UNIQUE(provider, provider_user_id)
+);
+
+CREATE INDEX ix_oauth_accounts_user_id ON oauth_accounts(user_id);
+CREATE INDEX ix_oauth_accounts_provider_user_id ON oauth_accounts(provider_user_id);
+
+COMMENT ON TABLE oauth_accounts IS 'Linked OAuth provider accounts (Google, GitHub, etc.)';
+
+-- ============================================================================
+-- API KEYS
+-- ============================================================================
+
+CREATE TABLE api_keys (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    key_prefix VARCHAR(12) NOT NULL,
+    key_hash VARCHAR(64) NOT NULL UNIQUE,
+    scopes VARCHAR(100)[] NOT NULL DEFAULT '{}',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    expires_at TIMESTAMP WITH TIME ZONE,
+    last_used_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE INDEX ix_api_keys_user_id ON api_keys(user_id);
+CREATE INDEX ix_api_keys_key_hash ON api_keys(key_hash);
+CREATE INDEX ix_api_keys_is_active ON api_keys(is_active);
+CREATE INDEX ix_api_keys_expires_at ON api_keys(expires_at);
+
+COMMENT ON TABLE api_keys IS 'Machine-to-machine API keys for service accounts';
+
+-- ============================================================================
+-- ABAC POLICIES
+-- ============================================================================
+
+CREATE TABLE policies (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    subject_type VARCHAR(50) NOT NULL,
+    subject_id VARCHAR(255) NOT NULL,
+    resource VARCHAR(255) NOT NULL,
+    action VARCHAR(100) NOT NULL,
+    effect VARCHAR(10) NOT NULL DEFAULT 'allow',
+    conditions JSONB,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE INDEX ix_policies_subject_type ON policies(subject_type);
+CREATE INDEX ix_policies_subject_id ON policies(subject_id);
+CREATE INDEX ix_policies_resource ON policies(resource);
+CREATE INDEX ix_policies_action ON policies(action);
+CREATE INDEX ix_policies_is_active ON policies(is_active);
+
+COMMENT ON TABLE policies IS 'Attribute-based access control (ABAC) policies';
+
+-- ============================================================================
+-- ALEMBIC VERSION TRACKING
+-- ============================================================================
+
+CREATE TABLE alembic_version (
+    version_num VARCHAR(32) NOT NULL PRIMARY KEY
+);
+
+INSERT INTO alembic_version (version_num) VALUES ('004');
