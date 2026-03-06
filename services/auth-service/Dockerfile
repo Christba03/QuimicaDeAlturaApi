@@ -34,7 +34,7 @@ USER appuser
 
 EXPOSE 8001
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["sh", "-c", "python bootstrap_db.py && exec uvicorn src.main:app --host 0.0.0.0 --port 8001"]
 
 # Stage 4: Development image (optional, includes dev tools)
 FROM dependencies as development
@@ -46,4 +46,4 @@ COPY . .
 
 EXPOSE 8001
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+CMD ["sh", "-c", "python bootstrap_db.py && exec uvicorn src.main:app --host 0.0.0.0 --port 8001 --reload"]
