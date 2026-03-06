@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 from redis.asyncio import Redis
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.config import get_settings
@@ -13,6 +14,9 @@ from src.api.v1.endpoints import plants, compounds, activities, articles, verifi
 
 logger = structlog.get_logger()
 settings = get_settings()
+
+# Set by lifespan for health_check
+redis_client: Redis | None = None
 
 engine = create_async_engine(
     settings.DATABASE_URL,
@@ -30,6 +34,7 @@ async_session_factory = async_sessionmaker(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global redis_client
     logger.info("starting_plant_service", port=settings.SERVICE_PORT)
     set_session_factory(async_session_factory)
 
@@ -93,7 +98,7 @@ async def health_check():
     # Check database
     try:
         async with async_session_factory() as session:
-            await session.execute("SELECT 1")
+            await session.execute(text("SELECT 1"))
         checks["database"] = "connected"
     except Exception:
         checks["database"] = "disconnected"
