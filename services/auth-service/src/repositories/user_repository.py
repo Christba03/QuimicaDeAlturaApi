@@ -44,7 +44,8 @@ class UserRepository:
     async def create(self, user: User) -> User:
         self.session.add(user)
         await self.session.flush()
-        await self.session.refresh(user, attribute_names=["roles"])
+        # Refresh so server-generated created_at/updated_at (and roles) are loaded for response serialization
+        await self.session.refresh(user)
         return user
 
     async def update(self, user: User, update_data: dict) -> User:

@@ -40,6 +40,11 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
+    @property
+    def is_verified(self) -> bool:
+        """Alias for email_verified for API/schema compatibility."""
+        return self.email_verified
+
     roles = relationship("Role", secondary="user_roles", back_populates="users", lazy="selectin")
     sessions = relationship("UserSession", back_populates="user", lazy="selectin", cascade="all, delete-orphan")
     verification_codes = relationship("VerificationCode", back_populates="user", lazy="selectin", cascade="all, delete-orphan")

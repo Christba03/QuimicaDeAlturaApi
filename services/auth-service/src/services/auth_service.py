@@ -24,6 +24,14 @@ from src.utils.security import (
 logger = structlog.get_logger()
 
 
+class EmailNotVerifiedError(Exception):
+    """Raised when login credentials are valid but email is not verified."""
+
+    def __init__(self, email: str):
+        self.email = email
+        super().__init__(f"Email not verified: {email}")
+
+
 class AuthService:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -76,14 +84,14 @@ class AuthService:
             logger.warning("auth.account_locked", email=email, user_id=str(user.id))
             return None, False
 
-        if not user.email_verified:
-            logger.warning("auth.email_not_verified", email=email, user_id=str(user.id))
-            return None, False
-
         if not verify_password(password, user.hashed_password):
             await self.security_service.handle_failed_login(user, ip_address)
             logger.warning("auth.failed_login_attempt", email=email, user_id=str(user.id))
             return None, False
+
+        if not user.email_verified:
+            logger.warning("auth.email_not_verified", email=email, user_id=str(user.id))
+            raise EmailNotVerifiedError(email)
 
         if not user.is_active:
             logger.warning("auth.inactive_user_login_attempt", email=email, user_id=str(user.id))

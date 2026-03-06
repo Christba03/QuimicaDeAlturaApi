@@ -16,7 +16,7 @@ from src.schemas.auth import (
     TokenResponse,
 )
 from src.schemas.user import UserResponse
-from src.services.auth_service import AuthService
+from src.services.auth_service import AuthService, EmailNotVerifiedError
 from src.services.security_service import SecurityService
 from src.repositories.user_repository import UserRepository
 from src.utils.password_validator import PasswordValidationError
@@ -107,9 +107,18 @@ async def login(
                 detail="Too many failed attempts from this IP. Try again later.",
             )
 
-    user, requires_2fa = await auth_service.authenticate(
-        email=payload.email, password=payload.password, ip_address=ip_address
-    )
+    try:
+        user, requires_2fa = await auth_service.authenticate(
+            email=payload.email, password=payload.password, ip_address=ip_address
+        )
+    except EmailNotVerifiedError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "email_not_verified",
+                "message": "Verify your email to sign in. Check your inbox or request a new code.",
+            },
+        )
 
     if user is None:
         if ip_address:
