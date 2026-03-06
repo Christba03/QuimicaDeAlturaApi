@@ -60,24 +60,29 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     headers={"Retry-After": str(settings.IP_LOCKOUT_DURATION_MINUTES * 60)},
                 )
 
-        identifier = get_client_identifier(request)
-
-        # Endpoint-specific limits
+        # Per-endpoint bucket so limits don't share one counter per IP
+        base_id = get_client_identifier(request)
         limit = 100
         window = 60
 
         if path.startswith("/api/v1/auth/login"):
             limit = settings.RATE_LIMIT_LOGIN_PER_15MIN
             window = 15 * 60
+            identifier = f"{base_id}:login"
         elif path.startswith("/api/v1/auth/register"):
             limit = settings.RATE_LIMIT_REGISTER_PER_HOUR
             window = 3600
+            identifier = f"{base_id}:register"
         elif path.startswith("/api/v1/auth/password/reset"):
             limit = settings.RATE_LIMIT_PASSWORD_RESET_PER_HOUR
             window = 3600
+            identifier = f"{base_id}:password_reset"
         elif path.startswith("/api/v1/auth/verify-email") or path.startswith("/api/v1/auth/resend-verification"):
             limit = settings.RATE_LIMIT_VERIFICATION_PER_HOUR
             window = 3600
+            identifier = f"{base_id}:verification"
+        else:
+            identifier = f"{base_id}:default"
 
         is_allowed, remaining, reset_after = await self.rate_limit_service.check_rate_limit(
             identifier, limit, window
