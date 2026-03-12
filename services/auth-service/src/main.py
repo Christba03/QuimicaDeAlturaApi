@@ -12,6 +12,7 @@ from src.config import settings
 from src.dependencies import set_session_factory
 from src.api.v1.endpoints import auth, users, roles, verification, two_factor, password, sessions
 from src.api.v1.endpoints import oauth, api_keys, policies, audit
+from src.api.v1.endpoints import settings as settings_router, audit_log
 from src.api.v1.endpoints.health import router as health_router
 from src.middleware.rate_limit import RateLimitMiddleware
 from src.services.rate_limit_service import RateLimitService
@@ -50,6 +51,11 @@ async def lifespan(app: FastAPI):
     logger.info("auth_service.starting", version=settings.APP_VERSION)
     set_session_factory(async_session_factory)
     app.state.db_session_factory = async_session_factory
+
+    # Create new tables (idempotent)
+    from src.models import Base
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
     # Redis
     redis_client = from_url(settings.redis_url, decode_responses=False)
@@ -139,8 +145,12 @@ app.include_router(api_keys.router, prefix="/api/v1", tags=["API Keys"])
 # ABAC Policies
 app.include_router(policies.router, prefix="/api/v1/policies", tags=["Policies"])
 
-# Audit log
+# Audit log (internal)
 app.include_router(audit.router, prefix="/api/v1/audit", tags=["Audit"])
+
+# Dashboard endpoints (routed via gateway /api/settings and /api/audit-log)
+app.include_router(settings_router.router, prefix="/api/v1/settings", tags=["Settings"])
+app.include_router(audit_log.router,       prefix="/api/v1/audit-log",  tags=["Audit Log"])
 
 # Health & readiness probes (registered at root, no /auth prefix via root_path)
 app.include_router(health_router, tags=["Health"])

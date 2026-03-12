@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -19,6 +20,11 @@ class PlantBase(BaseModel):
     distribution: str | None = None
     altitude_min: int | None = None
     altitude_max: int | None = None
+    properties: list[Any] | None = None
+    image_url: str | None = None
+    identifying_features: list[Any] | None = None
+    region: str | None = Field(None, max_length=255)
+    category: str | None = Field(None, max_length=128)
 
 
 class PlantCreate(PlantBase):
@@ -38,6 +44,11 @@ class PlantUpdate(BaseModel):
     distribution: str | None = None
     altitude_min: int | None = None
     altitude_max: int | None = None
+    properties: list[Any] | None = None
+    image_url: str | None = None
+    identifying_features: list[Any] | None = None
+    region: str | None = Field(None, max_length=255)
+    category: str | None = Field(None, max_length=128)
 
 
 class PlantResponse(BaseModel):
@@ -47,6 +58,10 @@ class PlantResponse(BaseModel):
     family: str | None
     genus: str | None
     status: PlantStatus
+    properties: list[Any] | None = None
+    image_url: str | None = None
+    region: str | None = None
+    category: str | None = None
     created_at: datetime
     updated_at: datetime
 

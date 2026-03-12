@@ -11,11 +11,28 @@ router = APIRouter()
 
 # Map URL prefixes to downstream service base URLs
 SERVICE_MAP: dict[str, str] = {
-    "/api/auth": settings.auth_service_url,
-    "/api/plants": settings.plant_service_url,
-    "/api/chatbot": settings.chatbot_service_url,
-    "/api/search": settings.search_service_url,
-    "/api/users": settings.user_service_url,
+    "/api/auth":                  settings.auth_service_url,
+    "/api/plants":                settings.plant_service_url,
+    "/api/compounds":             settings.plant_service_url,
+    "/api/ethnobotanical":        settings.plant_service_url,
+    "/api/genomic-data":          settings.plant_service_url,
+    "/api/articles":              settings.plant_service_url,
+    "/api/ontology-terms":        settings.plant_service_url,
+    "/api/regional-availability": settings.plant_service_url,
+    "/api/drug-references":       settings.plant_service_url,
+    "/api/inference-jobs":        settings.plant_service_url,
+    "/api/data-pipelines":        settings.plant_service_url,
+    "/api/image-logs":            settings.plant_service_url,
+    "/api/moderation":            settings.plant_service_url,
+    "/api/query-logs":            settings.plant_service_url,
+    "/api/analytics":             settings.plant_service_url,
+    "/api/external-apis":         settings.plant_service_url,
+    "/api/model-versions":        settings.plant_service_url,
+    "/api/audit-log":             settings.auth_service_url,
+    "/api/settings":              settings.auth_service_url,
+    "/api/chatbot":               settings.chatbot_service_url,
+    "/api/search":                settings.search_service_url,
+    "/api/users":                 settings.user_service_url,
 }
 
 

@@ -1,0 +1,287 @@
+version: "3.8"
+
+# Server compose (Unraid/Linux) — pulls images from Docker Hub.
+# - Exposes ONLY the API Gateway on host port 8000
+# - Keeps Postgres/Redis/Elasticsearch internal to the Docker network
+#
+# Images pushed:
+#   christba/quimicadealtura-api-api-gateway:latest
+#   christba/quimicadealtura-api-auth-service:latest
+#   christba/quimicadealtura-api-plant-service:latest
+#   christba/quimicadealtura-api-chatbot-service:latest
+#   christba/quimicadealtura-api-search-service:latest
+#   christba/quimicadealtura-api-user-service:latest
+#
+# Usage (on server):
+#   docker compose -f docker-compose.server.yml --env-file .env up -d
+
+services:
+  # ==========================================
+  # Infrastructure
+  # ==========================================
+
+  postgres-core:
+    image: postgres:16-alpine
+    container_name: mp-postgres-core
+    environment:
+      POSTGRES_DB: ${POSTGRES_CORE_DB:-medicinal_plants_core}
+      POSTGRES_USER: ${POSTGRES_CORE_USER:-mp_core_user}
+      POSTGRES_PASSWORD: ${POSTGRES_CORE_PASSWORD:?set POSTGRES_CORE_PASSWORD in .env}
+    volumes:
+      - postgres_core_data:/var/lib/postgresql/data
+      - ./database/postgres/schemas/core:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_CORE_USER:-mp_core_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [mp-network]
+
+  postgres-auth:
+    image: postgres:16-alpine
+    container_name: mp-postgres-auth
+    environment:
+      POSTGRES_DB: ${POSTGRES_AUTH_DB:-medicinal_plants_auth}
+      POSTGRES_USER: ${POSTGRES_AUTH_USER:-mp_auth_user}
+      POSTGRES_PASSWORD: ${POSTGRES_AUTH_PASSWORD:?set POSTGRES_AUTH_PASSWORD in .env}
+    volumes:
+      - postgres_auth_data:/var/lib/postgresql/data
+      - ./database/postgres/schemas/auth:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_AUTH_USER:-mp_auth_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [mp-network]
+
+  postgres-chatbot:
+    image: postgres:16-alpine
+    container_name: mp-postgres-chatbot
+    environment:
+      POSTGRES_DB: ${POSTGRES_CHATBOT_DB:-medicinal_plants_chatbot}
+      POSTGRES_USER: ${POSTGRES_CHATBOT_USER:-mp_chatbot_user}
+      POSTGRES_PASSWORD: ${POSTGRES_CHATBOT_PASSWORD:?set POSTGRES_CHATBOT_PASSWORD in .env}
+    volumes:
+      - postgres_chatbot_data:/var/lib/postgresql/data
+      - ./database/postgres/schemas/chatbot:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_CHATBOT_USER:-mp_chatbot_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [mp-network]
+
+  postgres-user:
+    image: postgres:16-alpine
+    container_name: mp-postgres-user
+    environment:
+      POSTGRES_DB: ${POSTGRES_USER_DB:-medicinal_plants_user}
+      POSTGRES_USER: ${POSTGRES_USER_USER:-mp_user_user}
+      POSTGRES_PASSWORD: ${POSTGRES_USER_PASSWORD:?set POSTGRES_USER_PASSWORD in .env}
+    volumes:
+      - postgres_user_data:/var/lib/postgresql/data
+      - ./database/postgres/schemas/user:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER_USER:-mp_user_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [mp-network]
+
+  redis:
+    image: redis:7-alpine
+    container_name: mp-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env} --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [mp-network]
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
+    container_name: mp-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    networks: [mp-network]
+
+  # ==========================================
+  # Application services (pulled from Docker Hub)
+  # ==========================================
+
+  auth-service:
+    image: christba/quimicadealtura-api-auth-service:latest
+    container_name: mp-auth-service
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_AUTH_USER:-mp_auth_user}:${POSTGRES_AUTH_PASSWORD}@postgres-auth:5432/${POSTGRES_AUTH_DB:-medicinal_plants_auth}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_DB=0
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      - JWT_REFRESH_TOKEN_EXPIRE_DAYS=${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      - SMTP_HOST=${SMTP_HOST:-localhost}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-noreply@medicinalplants.mx}
+      - SMTP_USE_TLS=${SMTP_USE_TLS:-true}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME:-Medicinal Plants API}
+      - EMAIL_QUEUE_ENABLED=${EMAIL_QUEUE_ENABLED:-false}
+      - EMAIL_VERIFICATION_CODE_EXPIRY_MINUTES=${EMAIL_VERIFICATION_CODE_EXPIRY_MINUTES:-15}
+      - PASSWORD_RESET_CODE_EXPIRY_MINUTES=${PASSWORD_RESET_CODE_EXPIRY_MINUTES:-15}
+      - MAX_LOGIN_ATTEMPTS=${MAX_LOGIN_ATTEMPTS:-5}
+      - LOCKOUT_DURATION_MINUTES=${LOCKOUT_DURATION_MINUTES:-30}
+      - RATE_LIMIT_LOGIN_PER_15MIN=${RATE_LIMIT_LOGIN_PER_15MIN:-5}
+      - RATE_LIMIT_ENABLED=${RATE_LIMIT_ENABLED:-true}
+      - RATE_LIMIT_REGISTER_PER_HOUR=${RATE_LIMIT_REGISTER_PER_HOUR:-3}
+      - RATE_LIMIT_VERIFICATION_PER_HOUR=${RATE_LIMIT_VERIFICATION_PER_HOUR:-30}
+      - RATE_LIMIT_PASSWORD_RESET_PER_HOUR=${RATE_LIMIT_PASSWORD_RESET_PER_HOUR:-30}
+      - TWO_FACTOR_ISSUER_NAME=${TWO_FACTOR_ISSUER_NAME:-Medicinal Plants API}
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [mp-network]
+
+  plant-service:
+    image: christba/quimicadealtura-api-plant-service:latest
+    container_name: mp-plant-service
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_CORE_USER:-mp_core_user}:${POSTGRES_CORE_PASSWORD}@postgres-core:5432/${POSTGRES_CORE_DB:-medicinal_plants_core}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_DB=1
+      - PUBMED_API_KEY=${PUBMED_API_KEY:-}
+      - PUBMED_BASE_URL=${PUBMED_BASE_URL:-https://eutils.ncbi.nlm.nih.gov/entrez/eutils/}
+      - PUBCHEM_BASE_URL=${PUBCHEM_BASE_URL:-https://pubchem.ncbi.nlm.nih.gov/rest/pug/}
+      - PMC_IDCONV_BASE_URL=${PMC_IDCONV_BASE_URL:-https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/}
+      - PMC_OA_BASE_URL=${PMC_OA_BASE_URL:-https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi}
+      - PMC_CITATION_BASE_URL=${PMC_CITATION_BASE_URL:-https://api.ncbi.nlm.nih.gov/lit/ctxp/v1/pubmed/}
+      - PMC_BIOC_BASE_URL=${PMC_BIOC_BASE_URL:-https://www.ncbi.nlm.nih.gov/research/bionlp/RESTful/pmcoa.cgi}
+      - NCBI_TOOL_NAME=${NCBI_TOOL_NAME:-QuimicaDeAltura}
+      - NCBI_TOOL_EMAIL=${NCBI_TOOL_EMAIL:-}
+    depends_on:
+      postgres-core:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [mp-network]
+
+  chatbot-service:
+    image: christba/quimicadealtura-api-chatbot-service:latest
+    container_name: mp-chatbot-service
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_CHATBOT_USER:-mp_chatbot_user}:${POSTGRES_CHATBOT_PASSWORD}@postgres-chatbot:5432/${POSTGRES_CHATBOT_DB:-medicinal_plants_chatbot}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_DB=2
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-5-20250929}
+      - PLANT_SERVICE_URL=http://plant-service:8002
+    depends_on:
+      postgres-chatbot:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [mp-network]
+
+  search-service:
+    image: christba/quimicadealtura-api-search-service:latest
+    container_name: mp-search-service
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - ELASTICSEARCH_HOST=elasticsearch
+      - ELASTICSEARCH_PORT=9200
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_DB=4
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [mp-network]
+
+  user-service:
+    image: christba/quimicadealtura-api-user-service:latest
+    container_name: mp-user-service
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER_USER:-mp_user_user}:${POSTGRES_USER_PASSWORD}@postgres-user:5432/${POSTGRES_USER_DB:-medicinal_plants_user}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_DB=3
+    depends_on:
+      postgres-user:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [mp-network]
+
+  api-gateway:
+    image: christba/quimicadealtura-api-api-gateway:latest
+    container_name: mp-api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - PLANT_SERVICE_URL=http://plant-service:8002
+      - CHATBOT_SERVICE_URL=http://chatbot-service:8003
+      - SEARCH_SERVICE_URL=http://search-service:8004
+      - USER_SERVICE_URL=http://user-service:8005
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-60}
+    depends_on:
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      plant-service:
+        condition: service_started
+      chatbot-service:
+        condition: service_started
+      search-service:
+        condition: service_started
+      user-service:
+        condition: service_started
+    networks: [mp-network]
+
+volumes:
+  postgres_core_data:
+  postgres_auth_data:
+  postgres_chatbot_data:
+  postgres_user_data:
+  redis_data:
+  elasticsearch_data:
+
+networks:
+  mp-network:
+    driver: bridge
+

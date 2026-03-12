@@ -10,7 +10,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from src.models.plant import Base
@@ -28,8 +28,10 @@ class ChemicalCompound(Base):
     pubchem_cid = Column(String(32), nullable=True, index=True)
     inchi_key = Column(String(64), nullable=True, unique=True)
     smiles = Column(Text, nullable=True)
+    inchi = Column(Text, nullable=True)
     compound_class = Column(String(128), nullable=True)
     description = Column(Text, nullable=True)
+    properties = Column(JSONB, nullable=False, server_default="[]")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

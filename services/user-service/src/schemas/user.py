@@ -24,6 +24,9 @@ class UserProfileBase(BaseModel):
         default="beginner",
         description="beginner, intermediate, advanced, expert",
     )
+    birthdate: Optional[str] = Field(default=None, description="ISO date string YYYY-MM-DD")
+    nationality: Optional[str] = None
+    address: Optional[str] = None
 
 
 class UserProfileUpdate(UserProfileBase):

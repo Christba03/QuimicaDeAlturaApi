@@ -1,5 +1,6 @@
 """Shared fixtures for plant-service tests."""
 import uuid
+from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -7,6 +8,24 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.article import ScientificArticle
+
+
+@pytest.fixture(autouse=True)
+def mock_db_create_all():
+    """Prevent the app lifespan from connecting to postgres during tests."""
+    mock_conn = AsyncMock()
+    mock_conn.run_sync = AsyncMock()
+
+    @asynccontextmanager
+    async def _mock_begin():
+        yield mock_conn
+
+    mock_engine = MagicMock()
+    mock_engine.begin = _mock_begin
+    mock_engine.dispose = AsyncMock()
+
+    with patch("src.main.engine", mock_engine):
+        yield
 
 
 @pytest.fixture

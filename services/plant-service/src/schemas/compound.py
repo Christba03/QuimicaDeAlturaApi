@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -13,8 +14,10 @@ class CompoundBase(BaseModel):
     pubchem_cid: str | None = Field(None, max_length=32)
     inchi_key: str | None = Field(None, max_length=64)
     smiles: str | None = None
+    inchi: str | None = None
     compound_class: str | None = Field(None, max_length=128)
     description: str | None = None
+    properties: list[Any] | None = None
 
 
 class CompoundCreate(CompoundBase):
@@ -30,8 +33,10 @@ class CompoundUpdate(BaseModel):
     pubchem_cid: str | None = Field(None, max_length=32)
     inchi_key: str | None = Field(None, max_length=64)
     smiles: str | None = None
+    inchi: str | None = None
     compound_class: str | None = Field(None, max_length=128)
     description: str | None = None
+    properties: list[Any] | None = None
 
 
 class CompoundResponse(CompoundBase):

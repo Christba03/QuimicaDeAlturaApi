@@ -56,6 +56,9 @@ class ProfileService:
             if profile_raw.get("altitude_meters")
             else None,
             expertise_level=profile_raw.get("expertise_level", "beginner"),
+            birthdate=profile_raw.get("birthdate"),
+            nationality=profile_raw.get("nationality"),
+            address=profile_raw.get("address"),
             preferences=preferences,
             favorites_count=favorites_count,
             reports_count=reports_count,
