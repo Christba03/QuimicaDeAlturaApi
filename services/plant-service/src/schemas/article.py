@@ -27,6 +27,7 @@ class ArticleBase(BaseModel):
     pdf_url: str | None = None
     full_text_url: str | None = None
     article_type: str | None = Field(None, max_length=100)
+    country: str | None = Field(None, max_length=100)
     peer_reviewed: bool = True
 
 

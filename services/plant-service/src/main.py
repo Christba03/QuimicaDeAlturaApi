@@ -11,6 +11,21 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from src.config import get_settings
 from src.dependencies import set_session_factory, set_redis_client
 from src.api.v1.endpoints import plants, compounds, activities, articles, verification
+from src.api.v1.endpoints import (
+    ethnobotanical,
+    genomic_data,
+    ontology_terms,
+    regional_availability,
+    drug_references,
+    inference_jobs,
+    data_pipelines,
+    image_logs,
+    moderation,
+    query_logs,
+    analytics,
+    external_apis,
+    model_versions,
+)
 
 logger = structlog.get_logger()
 settings = get_settings()
@@ -37,6 +52,11 @@ async def lifespan(app: FastAPI):
     global redis_client
     logger.info("starting_plant_service", port=settings.SERVICE_PORT)
     set_session_factory(async_session_factory)
+
+    # Create all new tables (idempotent)
+    from src.models import Base
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
     # Initialize Redis
     redis_client = None
@@ -89,6 +109,19 @@ app.include_router(articles.router, prefix="/articles", tags=["Articles"])
 app.include_router(
     verification.router, prefix="/verification", tags=["Verification"]
 )
+app.include_router(ethnobotanical.router,        prefix="/ethnobotanical",        tags=["Ethnobotanical"])
+app.include_router(genomic_data.router,          prefix="/genomic-data",          tags=["Genomic Data"])
+app.include_router(ontology_terms.router,        prefix="/ontology-terms",        tags=["Ontology Terms"])
+app.include_router(regional_availability.router, prefix="/regional-availability", tags=["Regional Availability"])
+app.include_router(drug_references.router,       prefix="/drug-references",       tags=["Drug References"])
+app.include_router(inference_jobs.router,        prefix="/inference-jobs",        tags=["Inference Jobs"])
+app.include_router(data_pipelines.router,        prefix="/data-pipelines",        tags=["Data Pipelines"])
+app.include_router(image_logs.router,            prefix="/image-logs",            tags=["Image Logs"])
+app.include_router(moderation.router,            prefix="/moderation",            tags=["Moderation"])
+app.include_router(query_logs.router,            prefix="/query-logs",            tags=["Query Logs"])
+app.include_router(analytics.router,             prefix="/analytics",             tags=["Analytics"])
+app.include_router(external_apis.router,         prefix="/external-apis",         tags=["External APIs"])
+app.include_router(model_versions.router,        prefix="/model-versions",        tags=["Model Versions"])
 
 
 @app.get("/health", tags=["Health"])

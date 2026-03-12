@@ -11,7 +11,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, relationship
 import enum
 
@@ -46,6 +46,11 @@ class Plant(Base):
     status = Column(
         Enum(PlantStatus), nullable=False, default=PlantStatus.DRAFT, index=True
     )
+    properties = Column(JSONB, nullable=False, server_default="[]")
+    image_url = Column(Text, nullable=True)
+    identifying_features = Column(JSONB, nullable=False, server_default="[]")
+    region = Column(String(255), nullable=True, index=True)
+    category = Column(String(128), nullable=True, index=True)
     created_by = Column(UUID(as_uuid=True), nullable=True)
     reviewed_by = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

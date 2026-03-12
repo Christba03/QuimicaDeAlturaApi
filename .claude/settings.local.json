@@ -11,7 +11,28 @@
       "Bash(find:*)",
       "Bash(echo:*)",
       "Bash(docker compose:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(for dir:*)",
+      "Bash(for service:*)",
+      "Bash(do echo:*)",
+      "Read(//e/Documentos/GitHub/QuimicaDeAlturaApi/services/$service/**)",
+      "Bash(done)",
+      "Bash(cat /e/Documentos/GitHub/QuimicaDeAlturaApi/services/plant-service/src/models/__init__.py 2>/dev/null; echo \"---\"; grep -r \"create_all\\\\|bootstrap\" /e/Documentos/GitHub/QuimicaDeAlturaApi/services/ --include=\"*.py\" -l 2>/dev/null | head -10)",
+      "Bash(for f:*)",
+      "Read(//e/Documentos/GitHub/QuimicaDeAlturaApi/services/plant-service/src/api/v1/endpoints/**)",
+      "Bash(find /e/Documentos/GitHub/QuimicaDeAlturaApi/services/user-service/src -name \"*.py\" | xargs grep -l \"UserProfile\\\\|user_profile\" 2>/dev/null)",
+      "Bash(ls -la E:/Documentos/GitHub/QuimicaDeAlturaApi/services/*/tests/ 2>/dev/null | grep -E \"\\(conftest|__init__\\)\" | head -20)",
+      "Bash(ls *.yml *.yaml Makefile 2>/dev/null)",
+      "Bash(cd E:/Documentos/GitHub/QuimicaDeAlturaApi && make infra)",
+      "Bash(cd E:/Documentos/GitHub/QuimicaDeAlturaApi && make infra 2>&1)",
+      "Bash(cd E:/Documentos/GitHub/QuimicaDeAlturaApi/services/plant-service && pip install -q pytest pytest-asyncio httpx 2>&1 && python -m pytest tests/ -v 2>&1)",
+      "Bash(cd E:/Documentos/GitHub/QuimicaDeAlturaApi/services/plant-service && pip install -q -r requirements.txt 2>&1 | tail -5)",
+      "Bash(cd E:/Documentos/GitHub/QuimicaDeAlturaApi/services/auth-service && pip install -q -r requirements.txt 2>&1 | tail -3)",
+      "Bash(ls E:/Documentos/GitHub/QuimicaDeAlturaApi/services/auth-service/*.ini E:/Documentos/GitHub/QuimicaDeAlturaApi/services/auth-service/*.toml 2>/dev/null)",
+      "Bash(cat \"C:/Users/chris/AppData/Local/Temp/claude/E--Documentos-GitHub-QuimicaDeAlturaApi/a59ebe32-4024-4290-aeab-2a7f6db2f8d3/tasks/b1ia651x8.output\" 2>/dev/null | grep -v \"^$\" | tail -20)",
+      "Bash(cd E:/Documentos/GitHub/QuimicaDeAlturaApi && set PYTHONIOENCODING=utf-8 && python -X utf8 test_endpoints.py 2>&1)",
+      "Bash(winpty docker:*)",
+      "Bash(docker cp:*)"
     ]
   }
 }

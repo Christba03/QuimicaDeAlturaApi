@@ -63,6 +63,7 @@ class ScientificArticle(Base):
     impact_factor = Column(Numeric(6, 3), nullable=True)
 
     article_type = Column(String(100), nullable=True)
+    country = Column(String(100), nullable=True)
 
     quality_score = Column(Numeric(3, 2), nullable=True)
     peer_reviewed = Column(Boolean, default=True)

@@ -30,7 +30,7 @@ class UserPlantUsageReport(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     plant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     effectiveness: Mapped[str] = mapped_column(
-        Enum(EffectivenessRating, name="effectiveness_rating"),
+        String(50),
         nullable=False,
     )
     rating: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
