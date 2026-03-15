@@ -112,11 +112,18 @@ class OAuthService:
         cfg = PROVIDERS[provider]
         async with httpx.AsyncClient(timeout=10.0) as client:
             # Special handling for Google: support both access_token and id_token (JWT)
-            if provider == "google" and len(token.split(".")) == 3:
-                resp = await client.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={token}")
-                if resp.status_code == 200:
-                    return resp.json()
-                logger.warning("oauth.google_id_token_info_failed", status=resp.status_code)
+            if provider == "google" and token and len(token.split(".")) == 3:
+                try:
+                    resp = await client.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={token}")
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if "sub" in data:
+                            return data
+                        logger.warning("oauth.google_id_token_missing_sub", data=data)
+                    else:
+                        logger.warning("oauth.google_id_token_invalid", status=resp.status_code, body=resp.text)
+                except Exception as e:
+                    logger.error("oauth.google_tokeninfo_request_failed", error=str(e))
 
             headers = {"Authorization": f"Bearer {token}"}
             resp = await client.get(cfg["userinfo_url"], headers=headers)
