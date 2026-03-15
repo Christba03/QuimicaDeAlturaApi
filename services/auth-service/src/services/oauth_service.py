@@ -110,6 +110,8 @@ class OAuthService:
     async def get_provider_user_info(self, provider: str, token: str) -> dict:
         """Fetch user profile from the provider using an access token or id token."""
         cfg = PROVIDERS[provider]
+        token = token.strip() if token else token
+        
         async with httpx.AsyncClient(timeout=10.0) as client:
             # Special handling for Google: support both access_token and id_token (JWT)
             if provider == "google" and token and len(token.split(".")) == 3:
@@ -121,13 +123,21 @@ class OAuthService:
                             return data
                         logger.warning("oauth.google_id_token_missing_sub", data=data)
                     else:
-                        logger.warning("oauth.google_id_token_invalid", status=resp.status_code, body=resp.text)
+                        logger.error("oauth.google_id_token_rejected", status=resp.status_code, body=resp.text)
                 except Exception as e:
-                    logger.error("oauth.google_tokeninfo_request_failed", error=str(e))
+                    logger.exception("oauth.google_tokeninfo_request_failed")
 
             headers = {"Authorization": f"Bearer {token}"}
             resp = await client.get(cfg["userinfo_url"], headers=headers)
-            resp.raise_for_status()
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                logger.error("oauth.provider_userinfo_error", 
+                             provider=provider, 
+                             status=resp.status_code, 
+                             body=resp.text)
+                raise ValueError(f"OAuth provider validation failed: {resp.status_code}") from e
+            
             data = resp.json()
 
             # GitHub: primary email may need a separate call

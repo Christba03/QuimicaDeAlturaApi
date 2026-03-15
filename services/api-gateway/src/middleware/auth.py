@@ -53,7 +53,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         try:
             async with httpx.AsyncClient(timeout=settings.request_timeout_seconds) as client:
                 response = await client.post(
-                    f"{settings.auth_service_url}/auth/validate",
+                    f"{settings.auth_service_url}/api/v1/auth/validate",
                     json={"token": token},
                 )
 
