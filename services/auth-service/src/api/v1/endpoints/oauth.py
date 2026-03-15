@@ -27,6 +27,10 @@ class OAuthAuthorizeResponse(BaseModel):
     provider: str
 
 
+class OAuthVerifyTokenRequest(BaseModel):
+    access_token: str
+
+
 def get_oauth_service(session: AsyncSession = Depends(get_db)) -> OAuthService:
     return OAuthService(session)
 
@@ -94,4 +98,48 @@ async def oauth_callback(
     await webhook_service.emit("LOGIN_SUCCESS", user_id=str(user.id), data={"provider": provider})
 
     logger.info("oauth.login_complete", provider=provider, user_id=str(user.id), is_new=is_new)
+    return tokens
+
+
+@router.post("/{provider}/verify-token", response_model=TokenResponse)
+async def oauth_verify_token(
+    provider: str,
+    request: Request,
+    body: OAuthVerifyTokenRequest,
+    oauth_service: OAuthService = Depends(get_oauth_service),
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    """
+    Handle native mobile OAuth login using an access token obtained directly 
+    from the provider on the device (e.g., via Capacitor plugins).
+    """
+    if provider not in PROVIDERS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown provider: {provider}")
+
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    accept_language = request.headers.get("accept-language")
+
+    try:
+        user, is_new = await oauth_service.authenticate_with_token(provider, body.access_token)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error("oauth.verify_token_error", provider=provider, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="OAuth provider validation failed. Please try again.",
+        )
+
+    tokens = await auth_service.create_tokens(
+        user,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        accept_language=accept_language,
+    )
+
+    await auth_service.security_service.handle_successful_login(user, ip_address)
+    await webhook_service.emit("LOGIN_SUCCESS", user_id=str(user.id), data={"provider": provider, "method": "native_token"})
+
+    logger.info("oauth.login_complete", provider=provider, user_id=str(user.id), is_new=is_new, method="native_token")
     return tokens

@@ -22,17 +22,47 @@ class UserRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def list_users(self, page: int = 1, page_size: int = 20) -> tuple[list[User], int]:
-        # Count total
+    async def list_users(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        status: str | None = None,
+        verified: bool | None = None,
+        role: str | None = None,
+    ) -> tuple[list[User], int]:
+        """List users with optional filters and pagination."""
+        stmt = select(User)
         count_stmt = select(func.count()).select_from(User)
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+
+        # Apply filters
+        if status == "locked":
+            stmt = stmt.where(User.locked_until > now)
+            count_stmt = count_stmt.where(User.locked_until > now)
+        elif status == "active":
+            stmt = stmt.where(User.is_active == True)
+            count_stmt = count_stmt.where(User.is_active == True)
+        elif status == "inactive":
+            stmt = stmt.where(User.is_active == False)
+            count_stmt = count_stmt.where(User.is_active == False)
+
+        if verified is not None:
+            stmt = stmt.where(User.email_verified == verified)
+            count_stmt = count_stmt.where(User.email_verified == verified)
+
+        if role is not None:
+            stmt = stmt.join(User.roles).where(Role.name == role)
+            count_stmt = count_stmt.join(User.roles).where(Role.name == role)
+
+        # Count total
         total_result = await self.session.execute(count_stmt)
         total = total_result.scalar_one()
 
         # Fetch page
         offset = (page - 1) * page_size
         stmt = (
-            select(User)
-            .options(selectinload(User.roles))
+            stmt.options(selectinload(User.roles))
             .order_by(User.created_at.desc())
             .offset(offset)
             .limit(page_size)

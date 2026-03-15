@@ -4,11 +4,11 @@ from typing import Literal
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.v1.dependencies import require_superuser
+from src.api.v1.dependencies import get_current_user, require_superuser
 from src.dependencies import get_db
 from src.models.user import User
 from src.models.role import Role
@@ -38,56 +38,22 @@ def get_db_session(session: AsyncSession = Depends(get_db)) -> AsyncSession:
 async def list_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    # Admin filters
     status: Literal["active", "inactive", "locked", "all"] | None = Query(None),
     verified: bool | None = Query(None, description="Filter by email verification status"),
     role: str | None = Query(None, description="Filter by role name"),
     _: dict = Depends(require_superuser),
     repo: UserRepository = Depends(get_user_repo),
-    session: AsyncSession = Depends(get_db_session),
 ):
     """
     List users with pagination and admin filters.
-    - ?status=locked  → accounts with active lockout
-    - ?verified=false → unverified email accounts
-    - ?role=analyst   → users with a specific role
     """
-    if status is None and verified is None and role is None:
-        # Fast path: no filters
-        users, total = await repo.list_users(page=page, page_size=page_size)
-        return UserListResponse(users=users, total=total, page=page, page_size=page_size)
-
-    # Build filtered query
-    stmt = select(User)
-    count_stmt = select(func.count()).select_from(User)
-
-    now = datetime.now(timezone.utc)
-
-    if status == "locked":
-        stmt = stmt.where(User.locked_until > now)
-        count_stmt = count_stmt.where(User.locked_until > now)
-    elif status == "active":
-        stmt = stmt.where(User.is_active == True)
-        count_stmt = count_stmt.where(User.is_active == True)
-    elif status == "inactive":
-        stmt = stmt.where(User.is_active == False)
-        count_stmt = count_stmt.where(User.is_active == False)
-
-    if verified is not None:
-        stmt = stmt.where(User.email_verified == verified)
-        count_stmt = count_stmt.where(User.email_verified == verified)
-
-    if role is not None:
-        stmt = stmt.join(User.roles).where(Role.name == role)
-        count_stmt = count_stmt.join(User.roles).where(Role.name == role)
-
-    total_result = await session.execute(count_stmt)
-    total = total_result.scalar_one()
-
-    stmt = stmt.order_by(User.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
-    result = await session.execute(stmt)
-    users = list(result.scalars().all())
-
+    users, total = await repo.list_users(
+        page=page,
+        page_size=page_size,
+        status=status,
+        verified=verified,
+        role=role,
+    )
     return UserListResponse(users=users, total=total, page=page, page_size=page_size)
 
 
@@ -161,6 +127,34 @@ async def delete_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     await repo.delete(user)
     return None
+
+
+# ---------------------------------------------------------------------------
+# Mobile / Push Notifications
+# ---------------------------------------------------------------------------
+
+
+class UpdateFCMTokenRequest(BaseModel):
+    fcm_token: str | None = Field(None, max_length=500)
+
+
+@router.post("/me/fcm-token", status_code=status.HTTP_200_OK)
+async def update_my_fcm_token(
+    payload: UpdateFCMTokenRequest,
+    current_user: dict = Depends(get_current_user),
+    repo: UserRepository = Depends(get_user_repo),
+):
+    """Update the FCM token for the currently authenticated user."""
+    user_id = uuid.UUID(current_user["sub"])
+    user = await repo.get_by_id(user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user.fcm_token = payload.fcm_token
+    await repo.session.flush()
+
+    logger.info("user.fcm_token_updated", user_id=str(user_id))
+    return {"message": "FCM token updated successfully"}
 
 
 # ---------------------------------------------------------------------------

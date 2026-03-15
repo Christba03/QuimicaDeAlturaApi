@@ -31,15 +31,17 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# --- Middleware (order matters: outermost runs first) ---
-# CORS must be the outermost middleware so preflight responses include the right headers.
-setup_cors(app, settings.cors_origins_list)
+# --- Middleware (order matters: outermost runs last with add_middleware) ---
 
-# Rate limiting sits before auth so abusive unauthenticated traffic is blocked early.
+# Rate limiting should be early to block abusive traffic.
 app.add_middleware(RateLimitMiddleware)
 
-# Auth middleware validates JWTs and injects user info into request state.
+# Auth middleware validates JWTs and injects user info.
 app.add_middleware(AuthMiddleware)
+
+# CORS must be the outermost middleware so it can handle preflight (OPTIONS) requests
+# and add appropriate headers even to error responses from other middlewares.
+setup_cors(app, settings.cors_origins_list)
 
 # --- Prometheus metrics ---
 Instrumentator().instrument(app).expose(app)

@@ -139,6 +139,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_redis_password}
+      - CORS_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
       - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-60}
     depends_on:
@@ -295,32 +296,32 @@ services:
   # ==========================================
   # Frontend Applications
   # ==========================================
+  # Comentados temporalmente porque requieren repositorios externos
+  # webpage:
+  #   build:
+  #     context: ../Quimica-de-Altura
+  #     dockerfile: Dockerfile
+  #   image: quimicadealtura_api-webpage:prod
+  #   container_name: mp-webpage
+  #   ports:
+  #     - "${WEBPAGE_PORT:-3000}:80"
+  #   environment:
+  #     - API_BASE_URL=${API_BASE_URL:-http://localhost:8000}
+  #   networks:
+  #     - mp-network
 
-  webpage:
-    build:
-      context: ../Quimica-de-Altura
-      dockerfile: Dockerfile
-    image: quimicadealtura_api-webpage:prod
-    container_name: mp-webpage
-    ports:
-      - "${WEBPAGE_PORT:-3000}:80"
-    environment:
-      - API_BASE_URL=${API_BASE_URL:-http://localhost:8000}
-    networks:
-      - mp-network
-
-  landingpage:
-    build:
-      context: ../QuimicaDeAltura_LandingPage
-      dockerfile: Dockerfile
-    image: quimicadealtura_api-landingpage:prod
-    container_name: mp-landingpage
-    ports:
-      - "${LANDINGPAGE_PORT:-3001}:80"
-    environment:
-      - API_BASE_URL=${API_BASE_URL:-http://localhost:8000}
-    networks:
-      - mp-network
+  # landingpage:
+  #   build:
+  #     context: ../QuimicaDeAltura_LandingPage
+  #     dockerfile: Dockerfile
+  #   image: quimicadealtura_api-landingpage:prod
+  #   container_name: mp-landingpage
+  #   ports:
+  #     - "${LANDINGPAGE_PORT:-3001}:80"
+  #   environment:
+  #     - API_BASE_URL=${API_BASE_URL:-http://localhost:8000}
+  #   networks:
+  #     - mp-network
 
 volumes:
   postgres_core_data:

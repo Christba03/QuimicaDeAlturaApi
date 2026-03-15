@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     rate_limit_window_seconds: int = 60
 
     # CORS
-    cors_origins: str = "http://localhost:3000,http://localhost:8080"
+    allowed_origins: str = "http://localhost:3000,http://localhost:8080"
 
     # JWT / Auth
     jwt_secret: str = "change-me-in-production"
@@ -42,7 +42,9 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> list[str]:
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        if self.allowed_origins.strip() == "*":
+            return ["*"]
+        return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

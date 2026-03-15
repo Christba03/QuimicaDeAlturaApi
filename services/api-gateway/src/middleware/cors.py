@@ -7,14 +7,27 @@ def setup_cors(app: FastAPI, origins: list[str]) -> None:
 
     Args:
         app: The FastAPI application instance.
-        origins: List of allowed origin URLs.
+        origins: List of allowed origin URLs or ["*"].
     """
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["X-Request-ID"],
-        max_age=600,
-    )
+    allow_all = "*" in origins
+    if allow_all:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=[],
+            allow_origin_regex=".*",
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+            expose_headers=["X-Request-ID"],
+            max_age=600,
+        )
+    else:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+            expose_headers=["X-Request-ID"],
+            max_age=600,
+        )

@@ -44,20 +44,31 @@ class OAuthService:
         self.session = session
         self.user_repo = UserRepository(session)
 
+    def _get_client_id(self, provider: str) -> str:
+        if provider == "google":
+            return settings.GOOGLE_CLIENT_ID
+        if provider == "github":
+            return settings.GITHUB_CLIENT_ID
+        raise ValueError(f"Unknown provider: {provider}")
+
+    def _get_client_secret(self, provider: str) -> str:
+        if provider == "google":
+            return settings.GOOGLE_CLIENT_SECRET
+        if provider == "github":
+            return settings.GITHUB_CLIENT_SECRET
+        raise ValueError(f"Unknown provider: {provider}")
+
+    def _get_redirect_uri(self, provider: str) -> str:
+        return f"{settings.OAUTH_REDIRECT_BASE_URL}/api/v1/auth/oauth/{provider}/callback"
+
     def get_authorization_url(self, provider: str, state: str | None = None) -> str:
         """Build the OAuth authorization URL for the given provider."""
         cfg = PROVIDERS.get(provider)
         if not cfg:
             raise ValueError(f"Unsupported OAuth provider: {provider}")
 
-        if provider == "google":
-            client_id = settings.GOOGLE_CLIENT_ID
-        elif provider == "github":
-            client_id = settings.GITHUB_CLIENT_ID
-        else:
-            raise ValueError(f"Unsupported OAuth provider: {provider}")
-
-        redirect_uri = f"{settings.OAUTH_REDIRECT_BASE_URL}/api/v1/auth/oauth/{provider}/callback"
+        client_id = self._get_client_id(provider)
+        redirect_uri = self._get_redirect_uri(provider)
         state = state or secrets.token_urlsafe(32)
 
         params = {
@@ -76,14 +87,9 @@ class OAuthService:
     async def exchange_code(self, provider: str, code: str) -> dict:
         """Exchange the authorization code for an access token."""
         cfg = PROVIDERS[provider]
-        redirect_uri = f"{settings.OAUTH_REDIRECT_BASE_URL}/api/v1/auth/oauth/{provider}/callback"
-
-        if provider == "google":
-            client_id = settings.GOOGLE_CLIENT_ID
-            client_secret = settings.GOOGLE_CLIENT_SECRET
-        else:
-            client_id = settings.GITHUB_CLIENT_ID
-            client_secret = settings.GITHUB_CLIENT_SECRET
+        redirect_uri = self._get_redirect_uri(provider)
+        client_id = self._get_client_id(provider)
+        client_secret = self._get_client_secret(provider)
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             headers = {"Accept": "application/json"}
@@ -101,11 +107,18 @@ class OAuthService:
             resp.raise_for_status()
             return resp.json()
 
-    async def get_provider_user_info(self, provider: str, access_token: str) -> dict:
-        """Fetch user profile from the provider using the access token."""
+    async def get_provider_user_info(self, provider: str, token: str) -> dict:
+        """Fetch user profile from the provider using an access token or id token."""
         cfg = PROVIDERS[provider]
         async with httpx.AsyncClient(timeout=10.0) as client:
-            headers = {"Authorization": f"Bearer {access_token}"}
+            # Special handling for Google: support both access_token and id_token (JWT)
+            if provider == "google" and len(token.split(".")) == 3:
+                resp = await client.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={token}")
+                if resp.status_code == 200:
+                    return resp.json()
+                logger.warning("oauth.google_id_token_info_failed", status=resp.status_code)
+
+            headers = {"Authorization": f"Bearer {token}"}
             resp = await client.get(cfg["userinfo_url"], headers=headers)
             resp.raise_for_status()
             data = resp.json()
@@ -124,10 +137,13 @@ class OAuthService:
     def _normalize_user_info(self, provider: str, raw: dict) -> dict:
         """Normalize provider-specific user info into a common format."""
         if provider == "google":
+            name = raw.get("name")
+            if not name and (raw.get("given_name") or raw.get("family_name")):
+                name = f"{raw.get('given_name', '')} {raw.get('family_name', '')}".strip()
             return {
                 "provider_user_id": raw["sub"],
                 "email": raw.get("email"),
-                "name": raw.get("name", ""),
+                "name": name or "",
                 "avatar_url": raw.get("picture"),
                 "raw": raw,
             }
@@ -156,7 +172,17 @@ class OAuthService:
         if not access_token:
             raise ValueError("OAuth provider did not return an access token")
 
-        raw_info = await self.get_provider_user_info(provider, access_token)
+        return await self.authenticate_with_token(provider, access_token)
+
+    async def authenticate_with_token(
+        self, provider: str, token: str
+    ) -> tuple[User, bool]:
+        """
+        Complete the OAuth flow using an existing access token or ID token. 
+        (e.g., from mobile native login).
+        Returns (user, is_new_user).
+        """
+        raw_info = await self.get_provider_user_info(provider, token)
         info = self._normalize_user_info(provider, raw_info)
 
         provider_user_id = info["provider_user_id"]

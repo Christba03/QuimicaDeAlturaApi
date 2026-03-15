@@ -22,6 +22,7 @@ class UserUpdate(BaseModel):
     is_superuser: bool | None = None
     password: str | None = Field(None, min_length=8, max_length=128)
     role_ids: list[uuid.UUID] | None = None
+    fcm_token: str | None = Field(None, max_length=500)
 
 
 class RoleResponse(BaseModel):
@@ -42,6 +43,7 @@ class UserResponse(BaseModel):
     is_verified: bool = Field(default=False, validation_alias="email_verified")
     created_at: datetime
     updated_at: datetime
+    fcm_token: str | None = None
     roles: list[RoleResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True, "populate_by_name": True}
